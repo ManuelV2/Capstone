@@ -186,10 +186,10 @@ app.use(async (ctx, next) => {
 app.use(router.routes());
 app.use(router.allowedMethods());
 
-// Export handler for Vercel
+// Exporta el manejador para Vercel
 export default app.handle;
 
-// Start server only if running locally
+// Inicia el servidor solo si se ejecuta localmente
 if (import.meta.main) {
   console.log("Servidor corriendo en http://localhost:8000");
   await app.listen({ port: 8000 });
