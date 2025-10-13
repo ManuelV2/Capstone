@@ -1,6 +1,6 @@
 # Sistema de Gestión de Trabajadores - Empresa de Seguridad
 
-Una aplicación web moderna para centralizar y gestionar toda la información de los trabajadores de una empresa de seguridad, construida con Deno, React y Docker.
+Una aplicación web moderna para centralizar y gestionar toda la información de los trabajadores de una empresa de seguridad, construida con Deno, React, Supabase y Docker.
 
 ## 🚀 Características
 
@@ -9,74 +9,81 @@ Una aplicación web moderna para centralizar y gestionar toda la información de
 - **Dashboard con estadísticas**: Vista general con métricas importantes
 - **Interfaz responsive**: Diseño adaptable para dispositivos móviles y desktop
 - **API RESTful**: Backend robusto con endpoints para todas las operaciones CRUD
+- **Base de datos real**: Integración con Supabase para persistencia de datos.
 
 ## 🛠️ Tecnologías Utilizadas
 
 - **Backend**: Deno + Oak Framework
 - **Frontend**: React (vanilla, sin bundler)
+- **Base de datos**: Supabase (PostgreSQL)
 - **Estilos**: Bootstrap 5 + CSS personalizado
 - **Containerización**: Docker + Docker Compose
-- **Base de datos**: En memoria (simulada) - lista para integrar PostgreSQL
 
-## 📋 Funcionalidades
+## 📋 Configuración Inicial
 
-### Gestión de Trabajadores
-- Registro de información personal (nombre, cédula, teléfono)
-- Asignación de cargos (Supervisor, Guardia, Coordinador, Vigilante)
-- Gestión de turnos (Diurno, Nocturno, Mixto)
-- Control de estados (Activo, Inactivo, Suspendido)
-- Fecha de ingreso automática
+### 1. Configurar Supabase
 
-### Dashboard
-- Contador total de trabajadores
-- Trabajadores activos
-- Trabajadores suspendidos
-- Trabajadores inactivos
+1.  **Crear cuenta en Supabase**: Ve a [supabase.com](https://supabase.com) y crea una cuenta.
+2.  **Crear nuevo proyecto**: Crea un nuevo proyecto en Supabase.
+3.  **Obtener credenciales**:
+    *   Ve a **Project Settings** (icono de engranaje) > **API**.
+    *   Copia la **Project URL** y la **anon public key**.
+4.  **Ejecutar el script SQL**:
+    *   Ve al **SQL Editor** en tu proyecto Supabase.
+    *   Copia y ejecuta el contenido del archivo `supabase_setup.sql` para crear la tabla y las políticas de seguridad.
 
-### Búsqueda y Filtros
-- Búsqueda por nombre, cédula o cargo
-- Filtrado por estado del trabajador
-- Interfaz intuitiva y responsive
+### 2. Configurar Variables de Entorno
+
+Crea un archivo `.env` en la raíz del proyecto con tus credenciales de Supabase:
+
+```env
+SUPABASE_URL=https://tu-project-url.supabase.co
+SUPABASE_ANON_KEY=tu-anon-public-key
+```
 
 ## 🚀 Instalación y Uso
 
 ### Opción 1: Con Docker (Recomendado)
 
-1. **Clonar el repositorio**:
-   ```bash
-   git clone <repository-url>
-   cd Capstone
-   ```
+1.  **Clonar el repositorio**:
+    ```bash
+    git clone <repository-url>
+    cd Capstone
+    ```
+2.  **Configurar el archivo `.env`** con tus credenciales de Supabase.
 
-2. **Ejecutar con Docker Compose**:
-   ```bash
-   docker-compose up --build
-   ```
+3.  **Ejecutar con Docker Compose**:
+    ```bash
+    docker-compose up --build
+    ```
 
-3. **Acceder a la aplicación**:
-   Abrir http://localhost:8000 en tu navegador
+4.  **Acceder a la aplicación**:
+    Abrir http://localhost:8000 en tu navegador.
 
 ### Opción 2: Desarrollo local con Deno
 
-1. **Instalar Deno**:
-   ```bash
-   curl -fsSL https://deno.land/install.sh | sh
-   ```
+1.  **Instalar Deno**:
+    ```bash
+    curl -fsSL https://deno.land/install.sh | sh
+    ```
+2.  **Configurar el archivo `.env`** con tus credenciales de Supabase.
 
-2. **Ejecutar el servidor de desarrollo**:
-   ```bash
-   deno task dev
-   ```
+3.  **Ejecutar el servidor de desarrollo**:
+    ```bash
+    deno task dev
+    ```
 
-3. **Acceder a la aplicación**:
-   Abrir http://localhost:8000 en tu navegador
+4.  **Acceder a la aplicación**:
+    Abrir http://localhost:8000 en tu navegador.
 
 ## 📁 Estructura del Proyecto
 
 ```
 Capstone/
-├── server.ts              # Servidor principal de Deno
+├── server.ts              # Servidor principal con integración Supabase
 ├── deno.json             # Configuración de Deno y dependencias
+├── supabase_setup.sql    # Script SQL para configurar la base de datos
+├── .env                  # Variables de entorno (no incluir en git)
 ├── Dockerfile            # Configuración para Docker
 ├── docker-compose.yml    # Orquestación de servicios
 ├── public/
@@ -89,13 +96,13 @@ Capstone/
 
 ## 🔌 API Endpoints
 
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| GET | `/api/workers` | Obtener todos los trabajadores |
-| GET | `/api/workers/:id` | Obtener un trabajador específico |
-| POST | `/api/workers` | Crear un nuevo trabajador |
-| PUT | `/api/workers/:id` | Actualizar un trabajador |
-| DELETE | `/api/workers/:id` | Eliminar un trabajador |
+| Método | Endpoint         | Descripción                    |
+|--------|------------------|--------------------------------|
+| GET    | `/api/workers`     | Obtener todos los trabajadores |
+| GET    | `/api/workers/:id` | Obtener un trabajador específico |
+| POST   | `/api/workers`     | Crear un nuevo trabajador      |
+| PUT    | `/api/workers/:id` | Actualizar un trabajador       |
+| DELETE | `/api/workers/:id` | Eliminar un trabajador         |
 
 ## 📝 Formato de Datos
 
@@ -107,32 +114,28 @@ Capstone/
   "cargo": "Supervisor",
   "turno": "Diurno",
   "estado": "Activo",
-  "telefono": "555-0123",
-  "fechaIngreso": "2023-01-15"
+  "telefono": "555-0123"
 }
 ```
 
 ## 🔧 Comandos Disponibles
 
 ```bash
-# Desarrollo
+# Desarrollo (con recarga automática)
 deno task dev
 
-# Construcción
-deno task build
-
-# Producción
+# Iniciar en producción
 deno task start
 
-# Docker
+# Docker: construir y ejecutar
 docker-compose up --build
+
+# Docker: detener
 docker-compose down
 ```
 
 ## 🚀 Próximas Mejoras
 
-- [ ] Integración con base de datos PostgreSQL
-- [ ] Autenticación y autorización
 - [ ] Reportes en PDF
 - [ ] Sistema de notificaciones
 - [ ] Historial de cambios

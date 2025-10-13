@@ -241,15 +241,26 @@ function App() {
     const [editingWorker, setEditingWorker] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
+    const [error, setError] = useState(null);
 
     // Fetch workers from API
     const fetchWorkers = async () => {
         try {
+            setLoading(true);
+            setError(null);
             const response = await fetch('/api/workers');
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
             const data = await response.json();
-            setWorkers(data);
+            console.log('Workers fetched:', data); // Debug log
+            setWorkers(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error('Error fetching workers:', error);
+            setError('Error al cargar los trabajadores. Por favor, intente de nuevo.');
+            setWorkers([]);
         } finally {
             setLoading(false);
         }
@@ -269,6 +280,11 @@ function App() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(workerData)
                 });
+                
+                if (!response.ok) {
+                    throw new Error('Error al actualizar el trabajador');
+                }
+                
                 const updatedWorker = await response.json();
                 setWorkers(workers.map(w => w.id === editingWorker.id ? updatedWorker : w));
             } else {
@@ -278,6 +294,11 @@ function App() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(workerData)
                 });
+                
+                if (!response.ok) {
+                    throw new Error('Error al crear el trabajador');
+                }
+                
                 const newWorker = await response.json();
                 setWorkers([...workers, newWorker]);
             }
@@ -285,6 +306,7 @@ function App() {
             setEditingWorker(null);
         } catch (error) {
             console.error('Error saving worker:', error);
+            alert('Error al guardar el trabajador. Por favor, intente de nuevo.');
         }
     };
 
@@ -292,10 +314,16 @@ function App() {
     const handleDeleteWorker = async (id) => {
         if (confirm('¿Está seguro de que desea eliminar este trabajador?')) {
             try {
-                await fetch(`/api/workers/${id}`, { method: 'DELETE' });
+                const response = await fetch(`/api/workers/${id}`, { method: 'DELETE' });
+                
+                if (!response.ok) {
+                    throw new Error('Error al eliminar el trabajador');
+                }
+                
                 setWorkers(workers.filter(w => w.id !== id));
             } catch (error) {
                 console.error('Error deleting worker:', error);
+                alert('Error al eliminar el trabajador. Por favor, intente de nuevo.');
             }
         }
     };
@@ -327,6 +355,19 @@ function App() {
         return React.createElement('div', { className: 'loading-spinner' },
             React.createElement('div', { className: 'spinner-border text-primary', role: 'status' },
                 React.createElement('span', { className: 'visually-hidden' }, 'Cargando...')
+            )
+        );
+    }
+
+    if (error) {
+        return React.createElement('div', { className: 'container mt-5' },
+            React.createElement('div', { className: 'alert alert-danger' },
+                React.createElement('h4', { className: 'alert-heading' }, 'Error'),
+                React.createElement('p', null, error),
+                React.createElement('button', {
+                    className: 'btn btn-primary',
+                    onClick: fetchWorkers
+                }, 'Reintentar')
             )
         );
     }
@@ -423,7 +464,11 @@ function App() {
                 React.createElement('div', { className: 'empty-state' },
                     React.createElement('i', { className: 'fas fa-users fa-3x mb-3' }),
                     React.createElement('h4', null, 'No se encontraron trabajadores'),
-                    React.createElement('p', null, 'No hay trabajadores que coincidan con los criterios de búsqueda.')
+                    React.createElement('p', null, 
+                        workers.length === 0 
+                            ? 'Agregue su primer trabajador haciendo clic en "Agregar Trabajador".'
+                            : 'No hay trabajadores que coincidan con los criterios de búsqueda.'
+                    )
                 )
             ) : (
                 React.createElement('div', { className: 'row' },
