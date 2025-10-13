@@ -1,0 +1,20 @@
+{
+  "tasks": {
+    "dev": "deno run --allow-net --allow-read --allow-env --watch server.ts",
+    "build": "deno run --allow-net --allow-read --allow-write --allow-env build.ts",
+    "start": "deno run --allow-net --allow-read --allow-env server.ts"
+  },
+  "imports": {
+    "@oak/oak": "https://deno.land/x/oak@v12.6.1/mod.ts",
+    "@std/http": "https://deno.land/std@0.208.0/http/mod.ts",
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "@types/react": "https://esm.sh/@types/react@18.2.0",
+    "@types/react-dom": "https://esm.sh/@types/react-dom@18.2.0"
+  },
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
+  }
+}

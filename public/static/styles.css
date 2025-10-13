@@ -1,0 +1,90 @@
+.navbar-brand {
+    font-weight: bold;
+}
+
+.worker-card {
+    transition: transform 0.2s;
+    border-left: 4px solid #007bff;
+}
+
+.worker-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.status-badge {
+    font-size: 0.85em;
+}
+
+.status-active {
+    background-color: #28a745;
+}
+
+.status-inactive {
+    background-color: #dc3545;
+}
+
+.status-suspended {
+    background-color: #ffc107;
+    color: #000;
+}
+
+.search-container {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.btn-action {
+    margin: 0 2px;
+}
+
+.form-floating label {
+    font-weight: 500;
+}
+
+.modal-header {
+    background-color: #007bff;
+    color: white;
+}
+
+.table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}
+
+.loading-spinner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 200px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: #6c757d;
+}
+
+.stats-card {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    border-radius: 10px;
+}
+
+.stats-card h4 {
+    font-size: 2rem;
+    font-weight: bold;
+}
+
+@media (max-width: 768px) {
+    .worker-card {
+        margin-bottom: 15px;
+    }
+    
+    .btn-action {
+        margin-bottom: 5px;
+        width: 100%;
+    }
+}
