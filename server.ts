@@ -174,5 +174,13 @@ app.use(async (ctx, next) => {
 app.use(router.routes());
 app.use(router.allowedMethods());
 
-console.log("Servidor corriendo en http://localhost:8000");
-await app.listen({ port: 8000 });
+// Export handler for Vercel
+export const handler = async (request: Request): Promise<Response> => {
+  return await app.handle(request);
+};
+
+// Start server only if running locally
+if (import.meta.main) {
+  console.log("Servidor corriendo en http://localhost:8000");
+  await app.listen({ port: 8000 });
+}
