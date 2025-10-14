@@ -10,12 +10,12 @@ const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY");
 
 if (!supabaseUrl || !supabaseKey) {
   console.error("❌ Missing Supabase environment variables!");
-  // No usar Deno.exit(1) en un entorno serverless
-} else {
-  console.log("✅ Supabase environment variables found.");
+  console.error("Please set SUPABASE_URL and SUPABASE_ANON_KEY");
+  Deno.exit(1);
 }
 
-const supabase = createClient(supabaseUrl!, supabaseKey!);
+const supabase = createClient(supabaseUrl, supabaseKey);
+console.log("✅ Connected to Supabase");
 
 // Middleware para CORS
 app.use(async (ctx, next) => {
@@ -186,11 +186,6 @@ app.use(async (ctx, next) => {
 app.use(router.routes());
 app.use(router.allowedMethods());
 
-// Exporta el manejador para Vercel
-export default app.handle;
-
-// Inicia el servidor solo si se ejecuta localmente
-if (import.meta.main) {
-  console.log("Servidor corriendo en http://localhost:8000");
-  await app.listen({ port: 8000 });
-}
+// Inicia el servidor
+console.log("🚀 Servidor corriendo en http://0.0.0.0:8000");
+await app.listen({ port: 8000 });
