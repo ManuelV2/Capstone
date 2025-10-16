@@ -481,7 +481,7 @@ function App() {
             React.createElement('div', { className: 'container' },
                 React.createElement('a', { className: 'navbar-brand' },
                     React.createElement('i', { className: 'fas fa-shield-alt me-2' }),
-                    'Sistema de Gestión de Trabajadores'
+                    'Sistema de Gestión de Trabajadores JC & Villagran'
                 )
             )
         ),
