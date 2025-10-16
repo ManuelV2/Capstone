@@ -32,6 +32,13 @@ Una aplicación web moderna para centralizar y gestionar toda la información de
     *   Ve al **SQL Editor** en tu proyecto Supabase.
     *   Copia y ejecuta el contenido del archivo `supabase_setup.sql` para crear la tabla y las políticas de seguridad.
 
+5.  **Crear el Bucket de Almacenamiento**:
+    *   Ve a la sección **Storage** en el panel de Supabase.
+    *   Haz clic en **Create a new bucket**.
+    *   Nombra el bucket exactamente `documentos_trabajadores`.
+    *   Activa la opción **Public bucket**.
+    *   Guarda los cambios.
+
 ### 2. Configurar Variables de Entorno
 
 Crea un archivo `.env` en la raíz del proyecto con tus credenciales de Supabase:

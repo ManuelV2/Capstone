@@ -1,5 +1,10 @@
 const { useState, useEffect } = React;
 
+// Configuración del cliente de Supabase para el frontend
+const SUPABASE_URL = 'https://zeuuzbdanuthppkyqoxq.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpldXV6YmRhbnV0aHBwa3lxb3hxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAzNjMyMTksImV4cCI6MjA3NTkzOTIxOX0.7Ko4XqG6Zk0gjGdGEKyKfLY0bLFGW_7OATdhatklKGc';
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 // Component for individual worker card
 function WorkerCard({ worker, onEdit, onDelete }) {
     const getStatusClass = (estado) => {
@@ -36,6 +41,15 @@ function WorkerCard({ worker, onEdit, onDelete }) {
                     React.createElement('i', { className: 'fas fa-phone me-2' }),
                     worker.telefono
                 ),
+                worker.documento_url && React.createElement('a', {
+                    href: worker.documento_url,
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                    className: 'btn btn-outline-secondary btn-sm mb-3 w-100'
+                }, 
+                    React.createElement('i', { className: 'fas fa-file-pdf me-2' }),
+                    'Ver Documento'
+                ),
                 React.createElement('div', { className: 'd-flex gap-2' },
                     React.createElement('button', {
                         className: 'btn btn-outline-primary btn-sm flex-fill',
@@ -64,12 +78,23 @@ function WorkerModal({ show, onHide, worker, onSave }) {
         cargo: '',
         turno: '',
         estado: 'Activo',
-        telefono: ''
+        telefono: '',
+        documento_url: ''
     });
+    const [file, setFile] = useState(null);
+    const [isUploading, setIsUploading] = useState(false);
 
     useEffect(() => {
         if (worker) {
-            setFormData(worker);
+            setFormData({
+                nombre: worker.nombre || '',
+                cedula: worker.cedula || '',
+                cargo: worker.cargo || '',
+                turno: worker.turno || '',
+                estado: worker.estado || 'Activo',
+                telefono: worker.telefono || '',
+                documento_url: worker.documento_url || ''
+            });
         } else {
             setFormData({
                 nombre: '',
@@ -77,14 +102,75 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                 cargo: '',
                 turno: '',
                 estado: 'Activo',
-                telefono: ''
+                telefono: '',
+                documento_url: ''
             });
         }
+        setFile(null);
+        setIsUploading(false);
     }, [worker, show]);
 
-    const handleSubmit = (e) => {
+    const handleFileChange = (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+            setFile(e.target.files[0]);
+        }
+    };
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        onSave(formData);
+        setIsUploading(true);
+
+        let finalWorkerData = { ...formData };
+
+        if (file) {
+            try {
+                console.log('Subiendo archivo:', file.name);
+                console.log('Bucket:', 'documentos_trabajadores');
+                
+                // Sanitizar el nombre del archivo para que sea compatible con Supabase Storage
+                const sanitizedCedula = (formData.cedula || 'sin-cedula').replace(/[^a-zA-Z0-9]/g, '_');
+                const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+                const fileName = `${sanitizedCedula}_${Date.now()}_${sanitizedFileName}`;
+                const filePath = `${fileName}`;
+                
+                console.log('Ruta del archivo sanitizada:', filePath);
+                
+                const { data: uploadData, error: uploadError } = await supabaseClient
+                    .storage
+                    .from('documentos_trabajadores')
+                    .upload(filePath, file, {
+                        upsert: true,
+                        contentType: 'application/pdf'
+                    });
+
+                if (uploadError) {
+                    console.error('Error detallado al subir archivo:', uploadError);
+                    console.error('Código de error:', uploadError.statusCode);
+                    console.error('Mensaje:', uploadError.message);
+                    alert(`Error al subir el documento: ${uploadError.message}. Por favor, verifica que el bucket existe y está configurado correctamente.`);
+                    setIsUploading(false);
+                    return;
+                }
+
+                console.log('Archivo subido exitosamente:', uploadData);
+
+                const { data: urlData } = supabaseClient
+                    .storage
+                    .from('documentos_trabajadores')
+                    .getPublicUrl(uploadData.path);
+                
+                console.log('URL pública generada:', urlData.publicUrl);
+                finalWorkerData.documento_url = urlData.publicUrl;
+            } catch (error) {
+                console.error('Excepción al subir archivo:', error);
+                alert('Error inesperado al subir el documento. Revisa la consola para más detalles.');
+                setIsUploading(false);
+                return;
+            }
+        }
+
+        await onSave(finalWorkerData);
+        setIsUploading(false);
     };
 
     const handleChange = (e) => {
@@ -213,6 +299,21 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                                     }),
                                     React.createElement('label', { htmlFor: 'telefono' }, 'Teléfono')
                                 )
+                            ),
+                            React.createElement('div', { className: 'col-12 mb-3' },
+                                React.createElement('label', { htmlFor: 'documento', className: 'form-label' }, 'Subir Documento (PDF)'),
+                                React.createElement('input', {
+                                    type: 'file',
+                                    className: 'form-control',
+                                    id: 'documento',
+                                    name: 'documento',
+                                    accept: '.pdf',
+                                    onChange: handleFileChange
+                                }),
+                                formData.documento_url && !file && React.createElement('small', { className: 'd-block mt-2' },
+                                    'Documento actual: ',
+                                    React.createElement('a', { href: formData.documento_url, target: '_blank' }, 'Ver PDF')
+                                )
                             )
                         )
                     ),
@@ -220,12 +321,14 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                         React.createElement('button', {
                             type: 'button',
                             className: 'btn btn-secondary',
-                            onClick: onHide
+                            onClick: onHide,
+                            disabled: isUploading
                         }, 'Cancelar'),
                         React.createElement('button', {
                             type: 'submit',
-                            className: 'btn btn-primary'
-                        }, worker ? 'Actualizar' : 'Guardar')
+                            className: 'btn btn-primary',
+                            disabled: isUploading
+                        }, isUploading ? 'Guardando...' : (worker ? 'Actualizar' : 'Guardar'))
                     )
                 )
             )

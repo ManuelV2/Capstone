@@ -82,7 +82,8 @@ router.post("/api/workers", async (ctx) => {
       cargo: body.cargo,
       turno: body.turno,
       estado: body.estado || 'Activo',
-      telefono: body.telefono
+      telefono: body.telefono,
+      documento_url: body.documento_url // Añadir el nuevo campo
     };
     
     const { data, error } = await supabase

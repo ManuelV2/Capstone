@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS public.workers (
     turno TEXT NOT NULL,
     estado TEXT NOT NULL,
     telefono TEXT NOT NULL,
+    documento_url TEXT NULL, -- Nueva columna para la URL del PDF
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -27,10 +28,22 @@ CREATE POLICY "Allow all access for anon users" ON public.workers
     FOR ALL USING (true)
     WITH CHECK (true);
 
--- 5. Insertar datos de ejemplo (opcional)
--- Esto solo se insertará si la tabla está vacía y las cédulas no existen.
-INSERT INTO public.workers (nombre, cedula, cargo, turno, estado, telefono)
-VALUES
-    ('Juan Pérez Ejemplo', '12345678', 'Supervisor', 'Diurno', 'Activo', '555-0123'),
-    ('María González Ejemplo', '87654321', 'Guardia', 'Nocturno', 'Activo', '555-0124')
-ON CONFLICT (cedula) DO NOTHING;
+-- 5. Configurar Supabase Storage
+-- NOTA: La creación del bucket debe hacerse desde el panel de Supabase.
+-- Ve a Storage > Create a new bucket > Nombra el bucket "documentos_trabajadores" y hazlo público.
+
+-- Políticas de acceso para el bucket 'documentos_trabajadores'
+-- Permite acceso público de lectura a los archivos.
+CREATE POLICY "Public Read Access" ON storage.objects
+    FOR SELECT USING (bucket_id = 'documentos_trabajadores');
+
+-- Permite a cualquier usuario subir archivos.
+CREATE POLICY "Allow Upload" ON storage.objects
+    FOR INSERT WITH CHECK (bucket_id = 'documentos_trabajadores');
+
+-- Permite a cualquier usuario actualizar/borrar sus propios archivos (opcional, pero útil).
+CREATE POLICY "Allow Update" ON storage.objects
+    FOR UPDATE USING (bucket_id = 'documentos_trabajadores');
+
+CREATE POLICY "Allow Delete" ON storage.objects
+    FOR DELETE USING (bucket_id = 'documentos_trabajadores');
