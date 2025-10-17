@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.workers (
     turno TEXT NOT NULL,
     estado TEXT NOT NULL,
     telefono TEXT NOT NULL,
-    documento_url TEXT NULL, -- Nueva columna para la URL del PDF
+    documentos JSONB DEFAULT '[]'::jsonb, -- Cambiado de documento_url a documentos
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

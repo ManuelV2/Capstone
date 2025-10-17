@@ -76,6 +76,9 @@ router.get("/api/workers/:id", async (ctx) => {
 router.post("/api/workers", async (ctx) => {
   try {
     const body = await ctx.request.body().value;
+    
+    console.log("📥 Datos recibidos:", body); // Log para debug
+    
     const workerData = {
       nombre: body.nombre,
       cedula: body.cedula,
@@ -83,8 +86,10 @@ router.post("/api/workers", async (ctx) => {
       turno: body.turno,
       estado: body.estado || 'Activo',
       telefono: body.telefono,
-      documento_url: body.documento_url // Añadir el nuevo campo
+      documentos: body.documentos || [] // Usar 'documentos' en lugar de 'documento_url'
     };
+    
+    console.log("📝 Datos a insertar:", workerData); // Log para debug
     
     const { data, error } = await supabase
       .from('workers')
@@ -92,14 +97,22 @@ router.post("/api/workers", async (ctx) => {
       .select()
       .single();
     
-    if (error) throw error;
+    if (error) {
+      console.error("❌ Error de Supabase:", error);
+      throw error;
+    }
     
+    console.log("✅ Trabajador creado:", data);
     ctx.response.status = 201;
     ctx.response.body = data;
   } catch (error) {
-    console.error("Error creating worker:", error);
+    console.error("❌ Error creating worker:", error);
     ctx.response.status = 500;
-    ctx.response.body = { error: "Error al crear el trabajador" };
+    ctx.response.body = { 
+      error: "Error al crear el trabajador", 
+      details: error.message,
+      hint: error.hint || "Verifica que la tabla 'workers' tenga la columna 'documentos' (JSONB)"
+    };
   }
 });
 
