@@ -32,18 +32,30 @@ CREATE POLICY "Allow all access for anon users" ON public.workers
 -- NOTA: La creación del bucket debe hacerse desde el panel de Supabase.
 -- Ve a Storage > Create a new bucket > Nombra el bucket "documentos_trabajadores" y hazlo público.
 
+-- Primero, eliminar políticas existentes si las hay
+DROP POLICY IF EXISTS "Public Read Access" ON storage.objects;
+DROP POLICY IF EXISTS "Allow Upload" ON storage.objects;
+DROP POLICY IF EXISTS "Allow Update" ON storage.objects;
+DROP POLICY IF EXISTS "Allow Delete" ON storage.objects;
+
 -- Políticas de acceso para el bucket 'documentos_trabajadores'
 -- Permite acceso público de lectura a los archivos.
 CREATE POLICY "Public Read Access" ON storage.objects
-    FOR SELECT USING (bucket_id = 'documentos_trabajadores');
+    FOR SELECT 
+    USING (bucket_id = 'documentos_trabajadores');
 
--- Permite a cualquier usuario subir archivos.
+-- Permite a cualquier usuario subir archivos (sin autenticación)
 CREATE POLICY "Allow Upload" ON storage.objects
-    FOR INSERT WITH CHECK (bucket_id = 'documentos_trabajadores');
+    FOR INSERT 
+    WITH CHECK (bucket_id = 'documentos_trabajadores');
 
--- Permite a cualquier usuario actualizar/borrar sus propios archivos (opcional, pero útil).
+-- Permite a cualquier usuario actualizar archivos
 CREATE POLICY "Allow Update" ON storage.objects
-    FOR UPDATE USING (bucket_id = 'documentos_trabajadores');
+    FOR UPDATE 
+    USING (bucket_id = 'documentos_trabajadores')
+    WITH CHECK (bucket_id = 'documentos_trabajadores');
 
+-- Permite a cualquier usuario eliminar archivos
 CREATE POLICY "Allow Delete" ON storage.objects
-    FOR DELETE USING (bucket_id = 'documentos_trabajadores');
+    FOR DELETE 
+    USING (bucket_id = 'documentos_trabajadores');

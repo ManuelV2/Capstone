@@ -8,7 +8,7 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // Component for individual worker card
 function WorkerCard({ worker, onEdit, onDelete }) {
     const [showDocuments, setShowDocuments] = useState(false);
-    
+
     const getStatusClass = (estado) => {
         switch (estado.toLowerCase()) {
             case 'activo': return 'status-active';
@@ -18,9 +18,7 @@ function WorkerCard({ worker, onEdit, onDelete }) {
         }
     };
 
-    // Manejar tanto 'documentos' (nuevo) como 'documento_url' (antiguo) para compatibilidad
     const documentos = Array.isArray(worker.documentos) ? worker.documentos : [];
-    const tieneDocumentoAntiguo = worker.documento_url && !documentos.length;
 
     return React.createElement('div', { className: 'col-md-6 col-lg-4 mb-3' },
         React.createElement('div', { className: 'card worker-card h-100' },
@@ -48,48 +46,32 @@ function WorkerCard({ worker, onEdit, onDelete }) {
                     worker.telefono
                 ),
                 React.createElement('div', { className: 'mt-auto' },
-                    (documentos.length > 0 || tieneDocumentoAntiguo) && React.createElement('div', { className: 'mb-3' },
-                        documentos.length > 0 ? (
-                            React.createElement(React.Fragment, null,
-                                React.createElement('button', {
-                                    className: 'btn btn-outline-secondary btn-sm w-100',
-                                    onClick: () => setShowDocuments(!showDocuments)
+                    documentos.length > 0 && React.createElement('div', { className: 'mb-3' },
+                        React.createElement('button', {
+                            className: 'btn btn-outline-secondary btn-sm w-100',
+                            onClick: () => setShowDocuments(!showDocuments)
+                        },
+                            React.createElement('i', { className: 'fas fa-file-alt me-2' }),
+                            `Ver Documentos (${documentos.length})`,
+                            React.createElement('i', { className: `fas fa-chevron-${showDocuments ? 'up' : 'down'} ms-2` })
+                        ),
+                        showDocuments && React.createElement('div', { className: 'list-group mt-2' },
+                            documentos.map((doc, index) => 
+                                React.createElement('a', {
+                                    key: index,
+                                    href: doc.url,
+                                    target: '_blank',
+                                    rel: 'noopener noreferrer',
+                                    className: 'list-group-item list-group-item-action d-flex justify-content-between align-items-center'
                                 },
-                                    React.createElement('i', { className: 'fas fa-file-alt me-2' }),
-                                    `Ver Documentos (${documentos.length})`,
-                                    React.createElement('i', { className: `fas fa-chevron-${showDocuments ? 'up' : 'down'} ms-2` })
-                                ),
-                                showDocuments && React.createElement('div', { className: 'list-group mt-2' },
-                                    documentos.map((doc, index) => 
-                                        React.createElement('a', {
-                                            key: index,
-                                            href: doc.url,
-                                            target: '_blank',
-                                            rel: 'noopener noreferrer',
-                                            className: 'list-group-item list-group-item-action d-flex justify-content-between align-items-center'
-                                        },
-                                            React.createElement('span', { className: 'text-truncate' },
-                                                React.createElement('i', { className: 'fas fa-file-pdf me-2 text-danger' }),
-                                                doc.nombre
-                                            ),
-                                            doc.fecha && React.createElement('small', { className: 'text-muted' }, 
-                                                new Date(doc.fecha).toLocaleDateString()
-                                            )
-                                        )
-                                    )
+                                    React.createElement('span', { className: 'text-truncate' },
+                                        React.createElement('i', { className: 'fas fa-file-pdf me-2 text-danger' }),
+                                        doc.nombre
+                                    ),
+                                    doc.fecha && React.createElement('small', { className: 'text-muted' }, new Date(doc.fecha).toLocaleDateString())
                                 )
                             )
-                        ) : tieneDocumentoAntiguo ? (
-                            React.createElement('a', {
-                                href: worker.documento_url,
-                                target: '_blank',
-                                rel: 'noopener noreferrer',
-                                className: 'btn btn-outline-secondary btn-sm w-100'
-                            }, 
-                                React.createElement('i', { className: 'fas fa-file-pdf me-2' }),
-                                'Ver Documento'
-                            )
-                        ) : null
+                        )
                     ),
                     React.createElement('div', { className: 'd-flex gap-2' },
                         React.createElement('button', {
@@ -128,18 +110,6 @@ function WorkerModal({ show, onHide, worker, onSave }) {
 
     useEffect(() => {
         if (worker) {
-            // Manejar migración de documento_url a documentos
-            let docs = [];
-            if (Array.isArray(worker.documentos)) {
-                docs = worker.documentos;
-            } else if (worker.documento_url) {
-                docs = [{
-                    url: worker.documento_url,
-                    nombre: 'Documento',
-                    fecha: worker.created_at || new Date().toISOString()
-                }];
-            }
-            
             setFormData({
                 nombre: worker.nombre || '',
                 cedula: worker.cedula || '',
@@ -147,7 +117,7 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                 turno: worker.turno || '',
                 estado: worker.estado || 'Activo',
                 telefono: worker.telefono || '',
-                documentos: docs
+                documentos: Array.isArray(worker.documentos) ? worker.documentos : []
             });
         } else {
             setFormData({
@@ -171,10 +141,12 @@ function WorkerModal({ show, onHide, worker, onSave }) {
     };
 
     const handleRemoveDocument = (indexToRemove) => {
-        setFormData(prev => ({
-            ...prev,
-            documentos: prev.documentos.filter((_, index) => index !== indexToRemove)
-        }));
+        if (confirm('¿Está seguro de que desea eliminar este documento? La eliminación será permanente al guardar.')) {
+            setFormData(prev => ({
+                ...prev,
+                documentos: prev.documentos.filter((_, index) => index !== indexToRemove)
+            }));
+        }
     };
 
     const handleSubmit = async (e) => {
@@ -187,8 +159,6 @@ function WorkerModal({ show, onHide, worker, onSave }) {
             try {
                 const uploadedDocs = [];
                 for (const file of files) {
-                    console.log('📤 Subiendo archivo:', file.name);
-                    
                     const sanitizedCedula = (formData.cedula || 'sin-cedula').replace(/[^a-zA-Z0-9.-]/g, '_');
                     const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
                     const fileName = `${sanitizedCedula}_${Date.now()}_${sanitizedFileName}`;
@@ -196,23 +166,14 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                     const { data: uploadData, error: uploadError } = await supabaseClient
                         .storage
                         .from('documentos_trabajadores')
-                        .upload(fileName, file, { 
-                            upsert: true, 
-                            contentType: file.type 
-                        });
+                        .upload(fileName, file, { upsert: true, contentType: file.type });
 
                     if (uploadError) {
-                        console.error('❌ Error al subir:', uploadError);
                         alert(`Error al subir ${file.name}: ${uploadError.message}`);
                         continue;
                     }
 
-                    console.log('✅ Archivo subido:', uploadData);
-
-                    const { data: urlData } = supabaseClient
-                        .storage
-                        .from('documentos_trabajadores')
-                        .getPublicUrl(uploadData.path);
+                    const { data: urlData } = supabaseClient.storage.from('documentos_trabajadores').getPublicUrl(uploadData.path);
                     
                     uploadedDocs.push({
                         url: urlData.publicUrl,
@@ -220,17 +181,15 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                         fecha: new Date().toISOString()
                     });
                 }
-                
                 finalWorkerData.documentos = [...(finalWorkerData.documentos || []), ...uploadedDocs];
             } catch (error) {
-                console.error('❌ Excepción al subir archivos:', error);
+                console.error('Excepción al subir archivos:', error);
                 alert('Error inesperado al subir los documentos.');
                 setIsUploading(false);
                 return;
             }
         }
 
-        console.log('💾 Guardando trabajador:', finalWorkerData);
         await onSave(finalWorkerData);
         setIsUploading(false);
     };
@@ -254,11 +213,7 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                     React.createElement('h5', { className: 'modal-title' },
                         worker ? 'Editar Trabajador' : 'Agregar Nuevo Trabajador'
                     ),
-                    React.createElement('button', { 
-                        type: 'button', 
-                        className: 'btn-close btn-close-white', 
-                        onClick: onHide 
-                    })
+                    React.createElement('button', { type: 'button', className: 'btn-close btn-close-white', onClick: onHide })
                 ),
                 React.createElement('form', { onSubmit: handleSubmit },
                     React.createElement('div', { className: 'modal-body' },
@@ -363,9 +318,7 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                                 )
                             ),
                             React.createElement('div', { className: 'col-12 mb-3' },
-                                React.createElement('label', { htmlFor: 'documento', className: 'form-label' }, 
-                                    'Subir Documentos (PDF) - Múltiples archivos permitidos'
-                                ),
+                                React.createElement('label', { htmlFor: 'documento', className: 'form-label' }, 'Subir Nuevos Documentos (PDF)'),
                                 React.createElement('input', {
                                     type: 'file',
                                     className: 'form-control',
@@ -374,56 +327,24 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                                     multiple: true,
                                     onChange: handleFileChange
                                 }),
-                                files.length > 0 && React.createElement('small', { className: 'd-block mt-2 text-success' }, 
-                                    `${files.length} archivo(s) para subir`
-                                )
+                                files.length > 0 && React.createElement('small', { className: 'd-block mt-2 text-success' }, `${files.length} archivo(s) nuevo(s) para subir.`)
                             ),
                             formData.documentos.length > 0 && React.createElement('div', { className: 'col-12 mb-3' },
-                                React.createElement('label', { className: 'form-label fw-bold' }, 'Documentos Actuales'),
+                                React.createElement('label', { className: 'form-label' }, 'Documentos Actuales'),
                                 React.createElement('ul', { className: 'list-group' },
-                                    formData.documentos.map((doc, index) => 
-                                        React.createElement('li', { 
-                                            key: index, 
-                                            className: 'list-group-item d-flex justify-content-between align-items-center' 
-                                        },
-                                            React.createElement('div', null,
-                                                React.createElement('i', { className: 'fas fa-file-pdf me-2 text-danger' }),
-                                                React.createElement('a', { 
-                                                    href: doc.url, 
-                                                    target: '_blank',
-                                                    rel: 'noopener noreferrer',
-                                                    className: 'text-decoration-none'
-                                                }, doc.nombre),
-                                                doc.fecha && React.createElement('small', { className: 'text-muted ms-2' },
-                                                    `(${new Date(doc.fecha).toLocaleDateString()})`
-                                                )
-                                            ),
-                                            React.createElement('button', { 
-                                                type: 'button', 
-                                                className: 'btn btn-sm btn-outline-danger', 
-                                                onClick: () => handleRemoveDocument(index),
-                                                title: 'Eliminar documento'
-                                            },
-                                                React.createElement('i', { className: 'fas fa-trash' })
-                                            )
+                                    formData.documentos.map((doc, index) => React.createElement('li', { key: index, className: 'list-group-item d-flex justify-content-between align-items-center' },
+                                        React.createElement('a', { href: doc.url, target: '_blank', rel: 'noopener noreferrer' }, doc.nombre),
+                                        React.createElement('button', { type: 'button', className: 'btn btn-sm btn-outline-danger', onClick: () => handleRemoveDocument(index) },
+                                            React.createElement('i', { className: 'fas fa-trash' })
                                         )
-                                    )
+                                    ))
                                 )
                             )
                         )
                     ),
                     React.createElement('div', { className: 'modal-footer' },
-                        React.createElement('button', { 
-                            type: 'button', 
-                            className: 'btn btn-secondary', 
-                            onClick: onHide, 
-                            disabled: isUploading 
-                        }, 'Cancelar'),
-                        React.createElement('button', { 
-                            type: 'submit', 
-                            className: 'btn btn-primary', 
-                            disabled: isUploading 
-                        }, isUploading ? 'Guardando...' : (worker ? 'Actualizar' : 'Guardar'))
+                        React.createElement('button', { type: 'button', className: 'btn btn-secondary', onClick: onHide, disabled: isUploading }, 'Cancelar'),
+                        React.createElement('button', { type: 'submit', className: 'btn btn-primary', disabled: isUploading }, isUploading ? 'Guardando...' : (worker ? 'Actualizar' : 'Guardar'))
                     )
                 )
             )
