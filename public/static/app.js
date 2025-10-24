@@ -5,17 +5,84 @@ const SUPABASE_URL = 'https://zeuuzbdanuthppkyqoxq.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpldXV6YmRhbnV0aHBwa3lxb3hxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAzNjMyMTksImV4cCI6MjA3NTkzOTIxOX0.7Ko4XqG6Zk0gjGdGEKyKfLY0bLFGW_7OATdhatklKGc';
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Funciones de formateo
+const formatCedula = (value) => {
+    // Permitir números y la letra K
+    const cleaned = value.toUpperCase().replace(/[^0-9K]/g, '');
+    
+    // Separar números y letra K
+    const numbers = cleaned.replace(/K/g, '');
+    const hasK = cleaned.includes('K');
+    
+    // Limitar a 8 dígitos principales + 1 verificador (número o K)
+    const mainDigits = numbers.slice(0, 8);
+    const lastDigit = numbers.slice(8, 9);
+    
+    // Si no hay dígitos, retornar vacío
+    if (mainDigits.length === 0) return '';
+    
+    // Aplicar formato XX.XXX.XXX
+    if (mainDigits.length <= 2) {
+        return mainDigits;
+    }
+    if (mainDigits.length <= 5) {
+        return `${mainDigits.slice(0, 2)}.${mainDigits.slice(2)}`;
+    }
+    if (mainDigits.length <= 8) {
+        const formatted = `${mainDigits.slice(0, 2)}.${mainDigits.slice(2, 5)}.${mainDigits.slice(5)}`;
+        
+        // Si tiene exactamente 8 dígitos y hay K o un dígito verificador
+        if (mainDigits.length === 8 && (hasK || lastDigit)) {
+            if (hasK) {
+                return `${formatted}-K`;
+            } else if (lastDigit) {
+                return `${formatted}-${lastDigit}`;
+            }
+        }
+        
+        return formatted;
+    }
+    
+    return mainDigits;
+};
+
+const formatTelefono = (value) => {
+    // Eliminar todo lo que no sea número
+    const numbers = value.replace(/\D/g, '');
+    
+    // Limitar a 10 dígitos
+    const limited = numbers.slice(0, 10);
+    
+    // Aplicar formato X XXXX XXXX
+    if (limited.length <= 1) return limited;
+    if (limited.length <= 5) return `${limited.slice(0, 1)} ${limited.slice(1)}`;
+    return `${limited.slice(0, 1)} ${limited.slice(1, 5)} ${limited.slice(5)}`;
+};
+
 // Component for individual worker card
 function WorkerCard({ worker, onEdit, onDelete }) {
     const [showDocuments, setShowDocuments] = useState(false);
 
     const getStatusClass = (estado) => {
         switch (estado.toLowerCase()) {
-            case 'activo': return 'status-active';
-            case 'inactivo': return 'status-inactive';
-            case 'suspendido': return 'status-suspended';
+            case 'activo':
+            case 'disponible': return 'status-active';
+            case 'inactivo':
+            case 'de vacaciones': return 'status-inactive';
+            case 'suspendido':
+            case 'con licencia médica': return 'status-suspended';
             default: return 'bg-secondary';
         }
+    };
+
+    // Mapear estados antiguos a nuevos para retrocompatibilidad
+    const getDisplayStatus = (estado) => {
+        const statusMap = {
+            'activo': 'Disponible',
+            'inactivo': 'De Vacaciones',
+            'suspendido': 'Con Licencia Médica'
+        };
+        return statusMap[estado.toLowerCase()] || estado;
     };
 
     const documentos = Array.isArray(worker.documentos) ? worker.documentos : [];
@@ -27,7 +94,7 @@ function WorkerCard({ worker, onEdit, onDelete }) {
                     React.createElement('h5', { className: 'card-title mb-0' }, worker.nombre),
                     React.createElement('span', { 
                         className: `badge status-badge ${getStatusClass(worker.estado)}` 
-                    }, worker.estado)
+                    }, getDisplayStatus(worker.estado))
                 ),
                 React.createElement('p', { className: 'card-text text-muted mb-2' },
                     React.createElement('i', { className: 'fas fa-id-card me-2' }),
@@ -101,7 +168,7 @@ function WorkerModal({ show, onHide, worker, onSave }) {
         cedula: '',
         cargo: '',
         turno: '',
-        estado: 'Activo',
+        estado: 'Disponible',
         telefono: '',
         documentos: []
     });
@@ -110,13 +177,23 @@ function WorkerModal({ show, onHide, worker, onSave }) {
 
     useEffect(() => {
         if (worker) {
+            // Mapear estados antiguos a nuevos
+            const normalizeStatus = (estado) => {
+                const statusMap = {
+                    'activo': 'Disponible',
+                    'inactivo': 'De Vacaciones',
+                    'suspendido': 'Con Licencia Médica'
+                };
+                return statusMap[estado.toLowerCase()] || estado;
+            };
+
             setFormData({
                 nombre: worker.nombre || '',
-                cedula: worker.cedula || '',
+                cedula: formatCedula(worker.cedula || ''),
                 cargo: worker.cargo || '',
                 turno: worker.turno || '',
-                estado: worker.estado || 'Activo',
-                telefono: worker.telefono || '',
+                estado: normalizeStatus(worker.estado || 'Disponible'),
+                telefono: formatTelefono(worker.telefono || ''),
                 documentos: Array.isArray(worker.documentos) ? worker.documentos : []
             });
         } else {
@@ -125,7 +202,7 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                 cedula: '',
                 cargo: '',
                 turno: '',
-                estado: 'Activo',
+                estado: 'Disponible',
                 telefono: '',
                 documentos: []
             });
@@ -195,9 +272,26 @@ function WorkerModal({ show, onHide, worker, onSave }) {
     };
 
     const handleChange = (e) => {
+        const { name, value } = e.target;
+        
+        let formattedValue = value;
+        
+        // Aplicar formato según el campo
+        if (name === 'cedula') {
+            // Permitir borrar el guion
+            // Si el usuario está borrando y el último carácter es '-', quitarlo
+            if (value.endsWith('-') && value.length < formData.cedula.length) {
+                formattedValue = value.slice(0, -1);
+            } else {
+                formattedValue = formatCedula(value);
+            }
+        } else if (name === 'telefono') {
+            formattedValue = formatTelefono(value);
+        }
+        
         setFormData({
             ...formData,
-            [e.target.name]: e.target.value
+            [name]: formattedValue
         });
     };
 
@@ -244,8 +338,9 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                                         onChange: handleChange,
                                         required: true,
                                         placeholder: 'Cédula'
+                                        // Removido maxLength para permitir la K
                                     }),
-                                    React.createElement('label', { htmlFor: 'cedula' }, 'Cédula')
+                                    React.createElement('label', { htmlFor: 'cedula' }, 'Cédula (XX.XXX.XXX-X o XX.XXX.XXX-K)')
                                 )
                             ),
                             React.createElement('div', { className: 'col-md-6 mb-3' },
@@ -295,9 +390,9 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                                         onChange: handleChange,
                                         required: true
                                     },
-                                        React.createElement('option', { value: 'Activo' }, 'Activo'),
-                                        React.createElement('option', { value: 'Inactivo' }, 'Inactivo'),
-                                        React.createElement('option', { value: 'Suspendido' }, 'Suspendido')
+                                        React.createElement('option', { value: 'Disponible' }, 'Disponible'),
+                                        React.createElement('option', { value: 'De Vacaciones' }, 'De Vacaciones'),
+                                        React.createElement('option', { value: 'Con Licencia Médica' }, 'Con Licencia Médica')
                                     ),
                                     React.createElement('label', { htmlFor: 'estado' }, 'Estado')
                                 )
@@ -312,9 +407,10 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                                         value: formData.telefono,
                                         onChange: handleChange,
                                         required: true,
-                                        placeholder: 'Teléfono'
+                                        placeholder: 'Teléfono',
+                                        maxLength: 11 // X XXXX XXXX = 11 caracteres
                                     }),
-                                    React.createElement('label', { htmlFor: 'telefono' }, 'Teléfono')
+                                    React.createElement('label', { htmlFor: 'telefono' }, 'Teléfono (X XXXX XXXX)')
                                 )
                             ),
                             React.createElement('div', { className: 'col-12 mb-3' },
@@ -465,9 +561,15 @@ function App() {
     // Calculate stats
     const stats = {
         total: workers.length,
-        active: workers.filter(w => w.estado === 'Activo').length,
-        inactive: workers.filter(w => w.estado === 'Inactivo').length,
-        suspended: workers.filter(w => w.estado === 'Suspendido').length
+        active: workers.filter(w => 
+            w.estado === 'Disponible' || w.estado.toLowerCase() === 'activo'
+        ).length,
+        inactive: workers.filter(w => 
+            w.estado === 'De Vacaciones' || w.estado.toLowerCase() === 'inactivo'
+        ).length,
+        suspended: workers.filter(w => 
+            w.estado === 'Con Licencia Médica' || w.estado.toLowerCase() === 'suspendido'
+        ).length
     };
 
     if (loading) {
@@ -518,7 +620,7 @@ function App() {
                     React.createElement('div', { className: 'card bg-success text-white text-center' },
                         React.createElement('div', { className: 'card-body' },
                             React.createElement('h4', null, stats.active),
-                            React.createElement('p', { className: 'mb-0' }, 'Activos')
+                            React.createElement('p', { className: 'mb-0' }, 'Disponibles')
                         )
                     )
                 ),
@@ -526,7 +628,7 @@ function App() {
                     React.createElement('div', { className: 'card bg-warning text-dark text-center' },
                         React.createElement('div', { className: 'card-body' },
                             React.createElement('h4', null, stats.suspended),
-                            React.createElement('p', { className: 'mb-0' }, 'Suspendidos')
+                            React.createElement('p', { className: 'mb-0' }, 'Con Licencia Médica')
                         )
                     )
                 ),
@@ -534,7 +636,7 @@ function App() {
                     React.createElement('div', { className: 'card bg-danger text-white text-center' },
                         React.createElement('div', { className: 'card-body' },
                             React.createElement('h4', null, stats.inactive),
-                            React.createElement('p', { className: 'mb-0' }, 'Inactivos')
+                            React.createElement('p', { className: 'mb-0' }, 'De Vacaciones')
                         )
                     )
                 )
@@ -561,9 +663,9 @@ function App() {
                             onChange: (e) => setFilterStatus(e.target.value)
                         },
                             React.createElement('option', { value: '' }, 'Todos'),
-                            React.createElement('option', { value: 'Activo' }, 'Activo'),
-                            React.createElement('option', { value: 'Inactivo' }, 'Inactivo'),
-                            React.createElement('option', { value: 'Suspendido' }, 'Suspendido')
+                            React.createElement('option', { value: 'Disponible' }, 'Disponible'),
+                            React.createElement('option', { value: 'De Vacaciones' }, 'De Vacaciones'),
+                            React.createElement('option', { value: 'Con Licencia Médica' }, 'Con Licencia Médica')
                         )
                     ),
                     React.createElement('div', { className: 'col-md-5 mb-3 text-end' },

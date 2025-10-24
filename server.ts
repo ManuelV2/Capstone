@@ -52,6 +52,44 @@ async function deleteFilesFromStorage(documentos: any[]) {
   }
 }
 
+// Funciones helper para normalizar formatos
+function normalizeCedula(cedula: string): string {
+  // Convertir a mayúsculas y eliminar puntos y guiones, permitir números y K
+  const cleaned = cedula.toUpperCase().replace(/[^0-9K]/g, '');
+  
+  // Separar números y letra K
+  const numbers = cleaned.replace(/K/g, '');
+  const hasK = cleaned.includes('K');
+  
+  // Verificar que tenga 8 dígitos principales
+  if (numbers.length >= 8) {
+    const mainDigits = numbers.slice(0, 8);
+    
+    if (hasK) {
+      // Formato con K: XX.XXX.XXX-K
+      return `${mainDigits.slice(0, 2)}.${mainDigits.slice(2, 5)}.${mainDigits.slice(5, 8)}-K`;
+    } else if (numbers.length >= 9) {
+      // Formato con dígito verificador: XX.XXX.XXX-X
+      const lastDigit = numbers.slice(8, 9);
+      return `${mainDigits.slice(0, 2)}.${mainDigits.slice(2, 5)}.${mainDigits.slice(5, 8)}-${lastDigit}`;
+    }
+  }
+  
+  return cedula; // Si no tiene el formato esperado, devolver como está
+}
+
+function normalizeTelefono(telefono: string): string {
+  // Eliminar espacios, dejar solo números
+  const numbers = telefono.replace(/\D/g, '');
+  
+  // Aplicar formato X XXXX XXXX
+  if (numbers.length === 10) {
+    return `${numbers.slice(0, 1)} ${numbers.slice(1, 5)} ${numbers.slice(5)}`;
+  }
+  
+  return telefono; // Si no tiene 10 dígitos, devolver como está
+}
+
 // Middleware para CORS
 app.use(async (ctx, next) => {
   ctx.response.headers.set("Access-Control-Allow-Origin", "*");
@@ -111,15 +149,20 @@ router.get("/api/workers/:id", async (ctx) => {
 router.post("/api/workers", async (ctx) => {
   try {
     const body = await ctx.request.body().value;
+    
+    console.log('📥 Datos recibidos para crear trabajador:', body);
+    
     const workerData = {
       nombre: body.nombre,
-      cedula: body.cedula,
+      cedula: normalizeCedula(body.cedula),
       cargo: body.cargo,
       turno: body.turno,
-      estado: body.estado || 'Activo',
-      telefono: body.telefono,
-      documentos: body.documentos || [] // Usar 'documentos'
+      estado: body.estado || 'Disponible',
+      telefono: normalizeTelefono(body.telefono),
+      documentos: body.documentos || []
     };
+    
+    console.log('💾 Datos a insertar:', workerData);
     
     const { data, error } = await supabase
       .from('workers')
@@ -127,14 +170,21 @@ router.post("/api/workers", async (ctx) => {
       .select()
       .single();
     
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Error de Supabase al crear:', error);
+      throw error;
+    }
     
+    console.log('✅ Trabajador creado exitosamente:', data);
     ctx.response.status = 201;
     ctx.response.body = data;
   } catch (error) {
-    console.error("Error creating worker:", error);
+    console.error("❌ Error creating worker:", error);
     ctx.response.status = 500;
-    ctx.response.body = { error: "Error al crear el trabajador", details: error.message };
+    ctx.response.body = { 
+      error: "Error al crear el trabajador", 
+      details: error.message 
+    };
   }
 });
 
@@ -149,7 +199,7 @@ router.put("/api/workers/:id", async (ctx) => {
     // Obtener el trabajador actual para verificar si cambió el documento
     const { data: currentWorker, error: fetchError } = await supabase
       .from('workers')
-      .select('documentos') // Solo necesitamos los documentos
+      .select('documentos')
       .eq('id', id)
       .single();
     
@@ -175,8 +225,16 @@ router.put("/api/workers/:id", async (ctx) => {
       await deleteFilesFromStorage(deletedDocs);
     }
     
-    // Remove id from update data
+    // Remove id from update data y normalizar formatos
     const { id: _, ...updateData } = body;
+    
+    // Normalizar cédula y teléfono si están presentes
+    if (updateData.cedula) {
+      updateData.cedula = normalizeCedula(updateData.cedula);
+    }
+    if (updateData.telefono) {
+      updateData.telefono = normalizeTelefono(updateData.telefono);
+    }
     
     console.log('💾 Datos para actualizar:', updateData);
     
