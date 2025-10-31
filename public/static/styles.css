@@ -113,3 +113,49 @@
         gap: 0.5rem;
     }
 }
+
+/* Estilos para recordatorios */
+.list-group-item {
+    transition: background-color 0.2s;
+}
+
+.list-group-item:hover {
+    background-color: #f8f9fa;
+}
+
+.alert-info {
+    border-left: 4px solid #0dcaf0;
+}
+
+.btn-group .btn {
+    border-radius: 0;
+}
+
+.btn-group .btn:first-child {
+    border-top-left-radius: 0.25rem;
+    border-bottom-left-radius: 0.25rem;
+}
+
+.btn-group .btn:last-child {
+    border-top-right-radius: 0.25rem;
+    border-bottom-right-radius: 0.25rem;
+}
+
+.card.bg-light {
+    border-left: 3px solid #0d6efd;
+}
+
+input[type="date"],
+input[type="time"] {
+    cursor: pointer;
+}
+
+/* Animación para recordatorios activos */
+@keyframes pulse-bell {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.btn-warning .fa-bell {
+    animation: pulse-bell 2s infinite;
+}

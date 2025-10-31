@@ -1,3 +1,6 @@
+// Cargar .env al inicio (solo si no usas --env-file)
+// import "./load_env.ts";
+
 import { Application, Router } from "@oak/oak";
 import { createClient } from "@supabase/supabase-js";
 
@@ -358,6 +361,10 @@ router.post("/api/workers", async (ctx) => {
     const body = await ctx.request.body().value;
     
     console.log('📥 Datos recibidos para crear trabajador:', body);
+    console.log('📄 Documentos recibidos:', body.documentos);
+    console.log('🔔 Documentos con recordatorios:', 
+      body.documentos?.filter((d: any) => d.recordatorio)
+    );
     
     const workerData = {
       nombre: body.nombre,
@@ -369,7 +376,7 @@ router.post("/api/workers", async (ctx) => {
       documentos: body.documentos || []
     };
     
-    console.log('💾 Datos a insertar:', workerData);
+    console.log('💾 Datos a insertar en DB:', workerData);
     
     const { data, error } = await supabase
       .from('workers')
@@ -383,6 +390,8 @@ router.post("/api/workers", async (ctx) => {
     }
     
     console.log('✅ Trabajador creado exitosamente:', data);
+    console.log('📋 Documentos guardados:', data.documentos);
+    
     ctx.response.status = 201;
     ctx.response.body = data;
   } catch (error) {
@@ -400,10 +409,30 @@ router.put("/api/workers/:id", async (ctx) => {
     const id = parseInt(ctx.params.id);
     const body = await ctx.request.body().value;
     
-    console.log('📝 Actualizando trabajador ID:', id);
-    console.log('📄 Datos recibidos:', body);
+    console.log('\n========================================');
+    console.log('📝 ACTUALIZANDO TRABAJADOR ID:', id);
+    console.log('========================================');
+    console.log('📦 Body recibido completo:');
+    console.log(JSON.stringify(body, null, 2));
+    console.log('\n📄 Documentos recibidos:', body.documentos?.length || 0);
     
-    // Obtener el trabajador actual para verificar si cambió el documento
+    if (body.documentos && Array.isArray(body.documentos)) {
+      body.documentos.forEach((doc: any, index: number) => {
+        console.log(`\n📋 Documento ${index + 1}:`);
+        console.log(`   - Nombre: ${doc.nombre}`);
+        console.log(`   - URL: ${doc.url.substring(0, 50)}...`);
+        console.log(`   - Tiene recordatorio: ${doc.recordatorio ? '✅ SÍ' : '❌ NO'}`);
+        
+        if (doc.recordatorio) {
+          console.log(`   🔔 Recordatorio:`);
+          console.log(`      - Fecha/Hora: ${doc.recordatorio.fechaHora}`);
+          console.log(`      - Mensaje: ${doc.recordatorio.mensaje || '(sin mensaje)'}`);
+          console.log(`      - Activo: ${doc.recordatorio.activo}`);
+        }
+      });
+    }
+    
+    // Obtener el trabajador actual
     const { data: currentWorker, error: fetchError } = await supabase
       .from('workers')
       .select('documentos')
@@ -420,7 +449,7 @@ router.put("/api/workers/:id", async (ctx) => {
       throw fetchError;
     }
     
-    // Identificar documentos que fueron eliminados
+    // Identificar documentos eliminados
     const oldDocs = currentWorker.documentos || [];
     const newDocs = body.documentos || [];
     const deletedDocs = oldDocs.filter(
@@ -428,14 +457,14 @@ router.put("/api/workers/:id", async (ctx) => {
     );
 
     if (deletedDocs.length > 0) {
-      console.log('🔄 Documentos eliminados, limpiando Storage...');
+      console.log('\n🗑️ Eliminando archivos del Storage...');
       await deleteFilesFromStorage(deletedDocs);
     }
     
-    // Remove id from update data y normalizar formatos
+    // Preparar datos para actualizar
     const { id: _, ...updateData } = body;
     
-    // Normalizar cédula y teléfono si están presentes
+    // Normalizar formatos
     if (updateData.cedula) {
       updateData.cedula = normalizeCedula(updateData.cedula);
     }
@@ -443,8 +472,10 @@ router.put("/api/workers/:id", async (ctx) => {
       updateData.telefono = normalizeTelefono(updateData.telefono);
     }
     
-    console.log('💾 Datos para actualizar:', updateData);
+    console.log('\n💾 Datos a actualizar en la BD:');
+    console.log(JSON.stringify(updateData, null, 2));
     
+    // Actualizar en Supabase
     const { data, error } = await supabase
       .from('workers')
       .update(updateData)
@@ -457,10 +488,26 @@ router.put("/api/workers/:id", async (ctx) => {
       throw error;
     }
     
-    console.log('✅ Trabajador actualizado exitosamente:', data);
+    console.log('\n✅ TRABAJADOR ACTUALIZADO EXITOSAMENTE');
+    console.log('📋 Documentos finales en BD:', data.documentos?.length || 0);
+    
+    const docsConRecordatorio = data.documentos?.filter((d: any) => d.recordatorio) || [];
+    console.log(`🔔 Recordatorios guardados: ${docsConRecordatorio.length}`);
+    
+    if (docsConRecordatorio.length > 0) {
+      console.log('\n🔔 RECORDATORIOS GUARDADOS:');
+      docsConRecordatorio.forEach((doc: any, index: number) => {
+        console.log(`   ${index + 1}. ${doc.nombre}`);
+        console.log(`      - Fecha: ${doc.recordatorio.fechaHora}`);
+        console.log(`      - Mensaje: ${doc.recordatorio.mensaje}`);
+      });
+    }
+    
+    console.log('========================================\n');
+    
     ctx.response.body = data;
   } catch (error) {
-    console.error("❌ Error updating worker:", error);
+    console.error("\n❌ ERROR UPDATING WORKER:", error);
     ctx.response.status = 500;
     ctx.response.body = { 
       error: "Error al actualizar el trabajador",

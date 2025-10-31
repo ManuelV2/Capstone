@@ -541,6 +541,7 @@ function WorkerModal({ show, onHide, worker, onSave }) {
     });
     const [files, setFiles] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
+    const [editingReminder, setEditingReminder] = useState(null); // Nuevo: índice del doc editando recordatorio
 
     useEffect(() => {
         if (worker) {
@@ -593,54 +594,142 @@ function WorkerModal({ show, onHide, worker, onSave }) {
         }
     };
 
+    // Función para establecer/editar recordatorio
+    const handleSetReminder = (docIndex, reminderData) => {
+        console.log('📝 Estableciendo recordatorio para doc index:', docIndex);
+        console.log('📋 Datos del recordatorio:', reminderData);
+        
+        setFormData(prev => {
+            const newDocuments = prev.documentos.map((doc, index) => {
+                if (index === docIndex) {
+                    const updatedDoc = {
+                        ...doc,
+                        recordatorio: reminderData
+                    };
+                    console.log('✅ Documento actualizado:', updatedDoc);
+                    return updatedDoc;
+                }
+                return doc;
+            });
+            
+            console.log('📄 Todos los documentos después de agregar recordatorio:', newDocuments);
+            
+            return {
+                ...prev,
+                documentos: newDocuments
+            };
+        });
+        setEditingReminder(null);
+    };
+
+    // Función para eliminar recordatorio
+    const handleRemoveReminder = (docIndex) => {
+        console.log('🗑️ Eliminando recordatorio del doc index:', docIndex);
+        
+        setFormData(prev => {
+            const newDocuments = prev.documentos.map((doc, index) => {
+                if (index === docIndex) {
+                    const { recordatorio, ...docWithoutReminder } = doc;
+                    console.log('✅ Documento sin recordatorio:', docWithoutReminder);
+                    return docWithoutReminder;
+                }
+                return doc;
+            });
+            
+            return {
+                ...prev,
+                documentos: newDocuments
+            };
+        });
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsUploading(true);
 
-        // Aplicar formato SOLO al guardar
-        let finalWorkerData = {
-            ...formData,
-            cedula: formatCedula(formData.cedula),
-            telefono: formatTelefono(formData.telefono)
-        };
+        console.log('🚀 INICIANDO SUBMIT');
+        console.log('📋 Estado actual de formData.documentos:', formData.documentos);
 
-        if (files.length > 0) {
-            try {
-                const uploadedDocs = [];
-                for (const file of files) {
-                    const sanitizedCedula = (finalWorkerData.cedula || 'sin-cedula').replace(/[^a-zA-Z0-9.-]/g, '_');
-                    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-                    const fileName = `${sanitizedCedula}_${Date.now()}_${sanitizedFileName}`;
-                    
-                    const { data: uploadData, error: uploadError } = await supabaseClient
-                        .storage
-                        .from('documentos_trabajadores')
-                        .upload(fileName, file, { upsert: true, contentType: file.type });
+        // CRÍTICO: Usar setFormData con callback para asegurar que tenemos el estado más reciente
+        setFormData(currentFormData => {
+            console.log('📄 Documentos en callback:', currentFormData.documentos);
+            console.log('🔔 Documentos con recordatorio:', 
+                currentFormData.documentos.filter(d => d.recordatorio)
+            );
 
-                    if (uploadError) {
-                        alert(`Error al subir ${file.name}: ${uploadError.message}`);
-                        continue;
+            // Crear objeto con datos finales
+            const finalData = {
+                nombre: currentFormData.nombre,
+                cedula: formatCedula(currentFormData.cedula),
+                cargo: currentFormData.cargo,
+                turno: currentFormData.turno,
+                estado: currentFormData.estado,
+                telefono: formatTelefono(currentFormData.telefono),
+                documentos: currentFormData.documentos
+            };
+
+            console.log('💾 Datos finales ANTES de subir archivos:', finalData);
+
+            // Ejecutar la lógica de subida de archivos y guardado
+            (async () => {
+                let allDocuments = [...currentFormData.documentos];
+
+                // Subir nuevos archivos si hay
+                if (files.length > 0) {
+                    console.log(`📤 Subiendo ${files.length} archivo(s)...`);
+                    try {
+                        for (const file of files) {
+                            const sanitizedCedula = finalData.cedula.replace(/[^a-zA-Z0-9.-]/g, '_');
+                            const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+                            const fileName = `${sanitizedCedula}_${Date.now()}_${sanitizedFileName}`;
+                            
+                            const { data: uploadData, error: uploadError } = await supabaseClient
+                                .storage
+                                .from('documentos_trabajadores')
+                                .upload(fileName, file, { upsert: true, contentType: file.type });
+
+                            if (uploadError) {
+                                console.error('❌ Error al subir:', uploadError);
+                                alert(`Error al subir ${file.name}: ${uploadError.message}`);
+                                continue;
+                            }
+
+                            const { data: urlData } = supabaseClient.storage
+                                .from('documentos_trabajadores')
+                                .getPublicUrl(uploadData.path);
+                            
+
+                            allDocuments.push({
+                                url: urlData.publicUrl,
+                                nombre: file.name,
+                                fecha: new Date().toISOString()
+                            });
+                        }
+                    } catch (error) {
+                        console.error('❌ Error subiendo archivos:', error);
+                        alert('Error al subir documentos');
+                        setIsUploading(false);
+                        return;
                     }
-
-                    const { data: urlData } = supabaseClient.storage.from('documentos_trabajadores').getPublicUrl(uploadData.path);
-                    
-                    uploadedDocs.push({
-                        url: urlData.publicUrl,
-                        nombre: file.name,
-                        fecha: new Date().toISOString()
-                    });
                 }
-                finalWorkerData.documentos = [...(finalWorkerData.documentos || []), ...uploadedDocs];
-            } catch (error) {
-                console.error('Excepción al subir archivos:', error);
-                alert('Error inesperado al subir los documentos.');
-                setIsUploading(false);
-                return;
-            }
-        }
 
-        await onSave(finalWorkerData);
-        setIsUploading(false);
+                // Actualizar con todos los documentos
+                finalData.documentos = allDocuments;
+
+                console.log('💾 DATOS FINALES A ENVIAR:');
+                console.log(JSON.stringify(finalData, null, 2));
+                console.log('🔔 Total recordatorios:', 
+                    finalData.documentos.filter(d => d.recordatorio).length
+                );
+
+                // Enviar al servidor
+                await onSave(finalData);
+                setIsUploading(false);
+            })();
+
+            // Retornar el estado actual sin cambios
+            return currentFormData;
+        });
     };
 
     const handleChange = (e) => {
@@ -666,7 +755,7 @@ function WorkerModal({ show, onHide, worker, onSave }) {
         className: 'modal show d-block',
         style: { backgroundColor: 'rgba(0,0,0,0.5)' }
     },
-        React.createElement('div', { className: 'modal-dialog modal-lg' },
+        React.createElement('div', { className: 'modal-dialog modal-xl' }, // Cambiado a modal-xl para más espacio
             React.createElement('div', { className: 'modal-content' },
                 React.createElement('div', { className: 'modal-header' },
                     React.createElement('h5', { className: 'modal-title' },
@@ -704,7 +793,8 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                                         required: true,
                                         placeholder: 'Cédula'
                                     }),
-                                    React.createElement('label', { htmlFor: 'cedula' }, 'Cédula'),                                )
+                                    React.createElement('label', { htmlFor: 'cedula' }, 'Cédula')
+                                )
                             ),
                             React.createElement('div', { className: 'col-md-6 mb-3' },
                                 React.createElement('div', { className: 'form-floating' },
@@ -772,7 +862,7 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                                         required: true,
                                         placeholder: 'Teléfono'
                                     }),
-                                    React.createElement('label', { htmlFor: 'telefono' }, 'Teléfono'),
+                                    React.createElement('label', { htmlFor: 'telefono' }, 'Teléfono')
                                 )
                             ),
                             React.createElement('div', { className: 'col-12 mb-3' },
@@ -787,13 +877,78 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                                 }),
                                 files.length > 0 && React.createElement('small', { className: 'd-block mt-2 text-success' }, `${files.length} archivo(s) nuevo(s) para subir.`)
                             ),
+                            
+                            // NUEVO: Lista de documentos con recordatorios
                             formData.documentos.length > 0 && React.createElement('div', { className: 'col-12 mb-3' },
-                                React.createElement('label', { className: 'form-label' }, 'Documentos Actuales'),
-                                React.createElement('ul', { className: 'list-group' },
-                                    formData.documentos.map((doc, index) => React.createElement('li', { key: index, className: 'list-group-item d-flex justify-content-between align-items-center' },
-                                        React.createElement('a', { href: doc.url, target: '_blank', rel: 'noopener noreferrer' }, doc.nombre),
-                                        React.createElement('button', { type: 'button', className: 'btn btn-sm btn-outline-danger', onClick: () => handleRemoveDocument(index) },
-                                            React.createElement('i', { className: 'fas fa-trash' })
+                                React.createElement('label', { className: 'form-label fw-bold' }, 
+                                    React.createElement('i', { className: 'fas fa-file-alt me-2' }),
+                                    'Documentos Actuales'
+                                ),
+                                React.createElement('div', { className: 'list-group' },
+                                    formData.documentos.map((doc, index) => React.createElement('div', { 
+                                        key: index, 
+                                        className: 'list-group-item' 
+                                    },
+                                        React.createElement('div', { className: 'd-flex justify-content-between align-items-start' },
+                                            React.createElement('div', { className: 'flex-grow-1' },
+                                                React.createElement('div', { className: 'd-flex align-items-center mb-2' },
+                                                    React.createElement('i', { className: 'fas fa-file-pdf text-danger me-2' }),
+                                                    React.createElement('a', { 
+                                                        href: doc.url, 
+                                                        target: '_blank', 
+                                                        rel: 'noopener noreferrer',
+                                                        className: 'fw-bold text-decoration-none'
+                                                    }, doc.nombre),
+                                                    doc.fecha && React.createElement('small', { className: 'text-muted ms-2' }, 
+                                                        `Subido: ${new Date(doc.fecha).toLocaleDateString()}`
+                                                    )
+                                                ),
+                                                
+                                                // Mostrar recordatorio si existe
+                                                doc.recordatorio && React.createElement('div', { className: 'alert alert-info mb-2 py-2' },
+                                                    React.createElement('div', { className: 'd-flex justify-content-between align-items-center' },
+                                                        React.createElement('div', null,
+                                                            React.createElement('i', { className: 'fas fa-bell me-2' }),
+                                                            React.createElement('strong', null, 'Recordatorio: '),
+                                                            new Date(doc.recordatorio.fechaHora).toLocaleString('es-CL'),
+                                                            doc.recordatorio.mensaje && React.createElement('div', { className: 'ms-4 small' },
+                                                                React.createElement('i', { className: 'fas fa-comment-dots me-1' }),
+                                                                doc.recordatorio.mensaje
+                                                            )
+                                                        ),
+                                                        React.createElement('button', {
+                                                            type: 'button',
+                                                            className: 'btn btn-sm btn-outline-danger',
+                                                            onClick: () => handleRemoveReminder(index),
+                                                            title: 'Eliminar recordatorio'
+                                                        }, React.createElement('i', { className: 'fas fa-times' }))
+                                                    )
+                                                ),
+
+                                                // Formulario para editar/agregar recordatorio
+                                                editingReminder === index && React.createElement(ReminderForm, {
+                                                    docIndex: index,
+                                                    docName: doc.nombre,
+                                                    existingReminder: doc.recordatorio,
+                                                    onSave: handleSetReminder,
+                                                    onCancel: () => setEditingReminder(null)
+                                                })
+                                            ),
+                                            
+                                            React.createElement('div', { className: 'btn-group' },
+                                                React.createElement('button', {
+                                                    type: 'button',
+                                                    className: `btn btn-sm ${doc.recordatorio ? 'btn-warning' : 'btn-outline-primary'}`,
+                                                    onClick: () => setEditingReminder(index),
+                                                    title: doc.recordatorio ? 'Editar recordatorio' : 'Agregar recordatorio'
+                                                }, React.createElement('i', { className: 'fas fa-bell' })),
+                                                React.createElement('button', {
+                                                    type: 'button',
+                                                    className: 'btn btn-sm btn-outline-danger',
+                                                    onClick: () => handleRemoveDocument(index),
+                                                    title: 'Eliminar documento'
+                                                }, React.createElement('i', { className: 'fas fa-trash' }))
+                                            )
                                         )
                                     ))
                                 )
@@ -802,9 +957,107 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                     ),
                     React.createElement('div', { className: 'modal-footer' },
                         React.createElement('button', { type: 'button', className: 'btn btn-secondary', onClick: onHide, disabled: isUploading }, 'Cancelar'),
-                        React.createElement('button', { type: 'submit', className: 'btn btn-primary', disabled: isUploading }, isUploading ? 'Guardando...' : (worker ? 'Actualizar' : 'Guardar'))
+                        React.createElement('button', { type: 'submit', className: 'btn btn-primary', disabled: isUploading }, 
+                            isUploading ? 'Guardando...' : (worker ? 'Actualizar' : 'Guardar')
+                        )
                     )
                 )
+            )
+        )
+    );
+}
+
+// NUEVO: Componente para formulario de recordatorio
+function ReminderForm({ docIndex, docName, existingReminder, onSave, onCancel }) {
+    const [reminderDate, setReminderDate] = useState('');
+    const [reminderTime, setReminderTime] = useState('');
+    const [reminderMessage, setReminderMessage] = useState('');
+
+    useEffect(() => {
+        if (existingReminder) {
+            const dt = new Date(existingReminder.fechaHora);
+            setReminderDate(dt.toISOString().split('T')[0]);
+            setReminderTime(dt.toTimeString().slice(0, 5));
+            setReminderMessage(existingReminder.mensaje || '');
+        } else {
+            // Valores por defecto: 1 semana desde hoy a las 9:00 AM
+            const defaultDate = new Date();
+            defaultDate.setDate(defaultDate.getDate() + 7);
+            setReminderDate(defaultDate.toISOString().split('T')[0]);
+            setReminderTime('09:00');
+            setReminderMessage(`Renovar: ${docName}`);
+        }
+    }, [existingReminder, docName]);
+
+    const handleSaveClick = () => {
+        // Validar que fecha y hora estén completas
+        if (!reminderDate || !reminderTime) {
+            alert('Por favor, selecciona fecha y hora para el recordatorio');
+            return;
+        }
+
+        const fechaHora = new Date(`${reminderDate}T${reminderTime}`);
+        
+        onSave(docIndex, {
+            activo: true,
+            fechaHora: fechaHora.toISOString(),
+            mensaje: reminderMessage.trim()
+        });
+    };
+
+    return React.createElement('div', { className: 'card mt-2 bg-light' },
+        React.createElement('div', { className: 'card-body' },
+            React.createElement('h6', { className: 'card-title' },
+                React.createElement('i', { className: 'fas fa-bell me-2' }),
+                existingReminder ? 'Editar Recordatorio' : 'Agregar Recordatorio'
+            ),
+            React.createElement('div', { className: 'row g-2' },
+                React.createElement('div', { className: 'col-md-4' },
+                    React.createElement('label', { className: 'form-label small' }, 'Fecha'),
+                    React.createElement('input', {
+                        type: 'date',
+                        className: 'form-control form-control-sm',
+                        value: reminderDate,
+                        onChange: (e) => setReminderDate(e.target.value),
+                        required: true,
+                        min: new Date().toISOString().split('T')[0]
+                    })
+                ),
+                React.createElement('div', { className: 'col-md-3' },
+                    React.createElement('label', { className: 'form-label small' }, 'Hora'),
+                    React.createElement('input', {
+                        type: 'time',
+                        className: 'form-control form-control-sm',
+                        value: reminderTime,
+                        onChange: (e) => setReminderTime(e.target.value),
+                        required: true
+                    })
+                ),
+                React.createElement('div', { className: 'col-md-5' },
+                    React.createElement('label', { className: 'form-label small' }, 'Mensaje (opcional)'),
+                    React.createElement('input', {
+                        type: 'text',
+                        className: 'form-control form-control-sm',
+                        value: reminderMessage,
+                        onChange: (e) => setReminderMessage(e.target.value),
+                        placeholder: 'Ej: Renovar certificado'
+                    })
+                )
+            ),
+            React.createElement('div', { className: 'mt-2 d-flex gap-2' },
+                React.createElement('button', {
+                    type: 'button',
+                    className: 'btn btn-sm btn-success',
+                    onClick: handleSaveClick
+                }, 
+                    React.createElement('i', { className: 'fas fa-check me-1' }),
+                    'Guardar Recordatorio'
+                ),
+                React.createElement('button', {
+                    type: 'button',
+                    className: 'btn btn-sm btn-secondary',
+                    onClick: onCancel
+                }, 'Cancelar')
             )
         )
     );
