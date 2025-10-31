@@ -78,6 +78,25 @@
     font-weight: bold;
 }
 
+/* Login Styles */
+.login-container {
+    max-width: 400px;
+    width: 100%;
+}
+
+.login-container .card {
+    border-radius: 15px;
+    border: none;
+}
+
+.login-container .card-body {
+    padding: 2rem;
+}
+
+.navbar-text {
+    margin-right: 1rem;
+}
+
 @media (max-width: 768px) {
     .worker-card {
         margin-bottom: 15px;
@@ -86,5 +105,11 @@
     .btn-action {
         margin-bottom: 5px;
         width: 100%;
+    }
+
+    .navbar .d-flex {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.5rem;
     }
 }

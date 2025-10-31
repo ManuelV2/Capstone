@@ -119,6 +119,196 @@ app.use(async (ctx, next) => {
   }
 });
 
+// ============ NUEVOS ENDPOINTS DE AUTENTICACIÓN ============
+
+// Login endpoint
+router.post("/api/auth/login", async (ctx) => {
+  try {
+    const body = await ctx.request.body().value;
+    const { email, password } = body;
+
+    console.log('🔐 Intento de login:', { email }); // Debug
+
+    if (!email || !password) {
+      ctx.response.status = 400;
+      ctx.response.body = { error: "Email y contraseña son requeridos" };
+      return;
+    }
+
+    // Buscar usuario en whitelist
+    const { data: user, error } = await supabase
+      .from('authorized_users')
+      .select('*')
+      .eq('email', email.toLowerCase())
+      .eq('activo', true)
+      .single();
+
+    console.log('👤 Usuario encontrado:', user ? 'Sí' : 'No'); // Debug
+    console.log('❌ Error de búsqueda:', error); // Debug
+
+    if (error || !user) {
+      console.error('❌ Usuario no encontrado o error:', error);
+      ctx.response.status = 401;
+      ctx.response.body = { error: "Credenciales inválidas" };
+      return;
+    }
+
+    console.log('🔑 Comparando contraseñas...'); // Debug
+    console.log('   - Recibida:', password);
+    console.log('   - En BD:', user.password_hash);
+
+    // Verificar contraseña (simple comparación por ahora)
+    if (password !== user.password_hash) {
+      console.error('❌ Contraseña incorrecta');
+      ctx.response.status = 401;
+      ctx.response.body = { error: "Credenciales inválidas" };
+      return;
+    }
+
+    // Login exitoso
+    const sessionData = {
+      id: user.id,
+      email: user.email,
+      nombre: user.nombre,
+      rol: user.rol
+    };
+
+    console.log('✅ Login exitoso para:', user.email);
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      user: sessionData,
+      token: btoa(JSON.stringify(sessionData))
+    };
+
+  } catch (error) {
+    console.error("❌ Error en login:", error);
+    ctx.response.status = 500;
+    ctx.response.body = { error: "Error en el servidor" };
+  }
+});
+
+// Obtener usuarios de whitelist
+router.get("/api/auth/users", async (ctx) => {
+  try {
+    const { data, error } = await supabase
+      .from('authorized_users')
+      .select('id, email, nombre, rol, activo, created_at')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    ctx.response.body = data || [];
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    ctx.response.status = 500;
+    ctx.response.body = { error: "Error al obtener usuarios" };
+  }
+});
+
+// Crear usuario en whitelist
+router.post("/api/auth/users", async (ctx) => {
+  try {
+    const body = await ctx.request.body().value;
+    
+    const userData = {
+      email: body.email.toLowerCase(),
+      password_hash: body.password, // En producción, hashear con bcrypt
+      nombre: body.nombre,
+      rol: body.rol || 'admin',
+      activo: body.activo !== false
+    };
+
+    const { data, error } = await supabase
+      .from('authorized_users')
+      .insert([userData])
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === '23505') { // Duplicate email
+        ctx.response.status = 400;
+        ctx.response.body = { error: "El email ya existe" };
+        return;
+      }
+      throw error;
+    }
+
+    // No devolver password_hash
+    const { password_hash, ...safeData } = data;
+    ctx.response.status = 201;
+    ctx.response.body = safeData;
+
+  } catch (error) {
+    console.error("❌ Error creating user:", error);
+    ctx.response.status = 500;
+    ctx.response.body = { error: "Error al crear usuario" };
+  }
+});
+
+// Actualizar usuario en whitelist
+router.put("/api/auth/users/:id", async (ctx) => {
+  try {
+    const id = parseInt(ctx.params.id);
+    const body = await ctx.request.body().value;
+
+    const updateData: any = {
+      email: body.email?.toLowerCase(),
+      nombre: body.nombre,
+      rol: body.rol,
+      activo: body.activo
+    };
+
+    // Solo actualizar password si se proporciona
+    if (body.password && body.password.trim() !== '') {
+      updateData.password_hash = body.password; // En producción, hashear
+    }
+
+    // Limpiar undefined
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined) delete updateData[key];
+    });
+
+    const { data, error } = await supabase
+      .from('authorized_users')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const { password_hash, ...safeData } = data;
+    ctx.response.body = safeData;
+
+  } catch (error) {
+    console.error("❌ Error updating user:", error);
+    ctx.response.status = 500;
+    ctx.response.body = { error: "Error al actualizar usuario" };
+  }
+});
+
+// Eliminar usuario de whitelist
+router.delete("/api/auth/users/:id", async (ctx) => {
+  try {
+    const id = parseInt(ctx.params.id);
+
+    const { error } = await supabase
+      .from('authorized_users')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    ctx.response.status = 204;
+  } catch (error) {
+    console.error("❌ Error deleting user:", error);
+    ctx.response.status = 500;
+    ctx.response.body = { error: "Error al eliminar usuario" };
+  }
+});
+
 // API Routes
 router.get("/api/workers", async (ctx) => {
   try {

@@ -80,6 +80,352 @@ const formatTelefono = (value) => {
     return `${limited.slice(0, 1)} ${limited.slice(1, 5)} ${limited.slice(5)}`;
 };
 
+// ============ COMPONENTES DE AUTENTICACIÓN ============
+
+// Componente de Login (VERSIÓN CORRECTA - USA LA API)
+function LoginPage({ onLoginSuccess }) {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+
+        try {
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Error al iniciar sesión');
+            }
+
+            // Guardar sesión
+            localStorage.setItem('auth_token', data.token);
+            localStorage.setItem('user_data', JSON.stringify(data.user));
+            
+            onLoginSuccess(data.user);
+
+        } catch (error) {
+            setError(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return React.createElement('div', { className: 'min-vh-100 d-flex align-items-center justify-content-center bg-light' },
+        React.createElement('div', { className: 'login-container' },
+            React.createElement('div', { className: 'card shadow-lg' },
+                React.createElement('div', { className: 'card-body p-5' },
+                    React.createElement('div', { className: 'text-center mb-4' },
+                        React.createElement('i', { className: 'fas fa-shield-alt fa-3x text-primary mb-3' }),
+                        React.createElement('h3', null, 'JC & Villagran'),
+                        React.createElement('p', { className: 'text-muted' }, 'Sistema de Gestión de Trabajadores')
+                    ),
+                    error && React.createElement('div', { className: 'alert alert-danger' }, error),
+                    React.createElement('form', { onSubmit: handleSubmit },
+                        React.createElement('div', { className: 'mb-3' },
+                            React.createElement('label', { className: 'form-label' }, 'Correo Electrónico'),
+                            React.createElement('input', {
+                                type: 'email',
+                                className: 'form-control',
+                                value: email,
+                                onChange: (e) => setEmail(e.target.value),
+                                required: true,
+                                disabled: loading,
+                                placeholder: 'admin@jcvillagran.cl'
+                            })
+                        ),
+                        React.createElement('div', { className: 'mb-4' },
+                            React.createElement('label', { className: 'form-label' }, 'Contraseña'),
+                            React.createElement('input', {
+                                type: 'password',
+                                className: 'form-control',
+                                value: password,
+                                onChange: (e) => setPassword(e.target.value),
+                                required: true,
+                                disabled: loading,
+                                placeholder: '••••••••'
+                            })
+                        ),
+                        React.createElement('button', {
+                            type: 'submit',
+                            className: 'btn btn-primary w-100',
+                            disabled: loading
+                        }, loading ? 'Iniciando sesión...' : 'Iniciar Sesión')
+                    ),
+                    React.createElement('div', { className: 'text-center mt-3' },
+                        React.createElement('small', { className: 'text-muted' }, 
+                            'Usuario por defecto: admin@jcvillagran.cl / admin123'
+                        )
+                    )
+                )
+            )
+        )
+    );
+}
+
+// Componente de Gestión de Whitelist
+function WhitelistPanel({ onClose }) {
+    const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [editingUser, setEditingUser] = useState(null);
+    const [formData, setFormData] = useState({
+        email: '',
+        password: '',
+        nombre: '',
+        rol: 'admin',
+        activo: true
+    });
+
+    useEffect(() => {
+        fetchUsers();
+    }, []);
+
+    const fetchUsers = async () => {
+        try {
+            const response = await fetch('/api/auth/users');
+            const data = await response.json();
+            setUsers(data);
+        } catch (error) {
+            console.error('Error fetching users:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        
+        try {
+            const url = editingUser 
+                ? `/api/auth/users/${editingUser.id}`
+                : '/api/auth/users';
+            
+            const method = editingUser ? 'PUT' : 'POST';
+
+            const response = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Error al guardar');
+            }
+
+            await fetchUsers();
+            setShowModal(false);
+            resetForm();
+        } catch (error) {
+            alert(error.message);
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm('¿Estás seguro de eliminar este usuario?')) return;
+
+        try {
+            await fetch(`/api/auth/users/${id}`, { method: 'DELETE' });
+            await fetchUsers();
+        } catch (error) {
+            alert('Error al eliminar usuario');
+        }
+    };
+
+    const handleEdit = (user) => {
+        setEditingUser(user);
+        setFormData({
+            email: user.email,
+            password: '',
+            nombre: user.nombre,
+            rol: user.rol,
+            activo: user.activo
+        });
+        setShowModal(true);
+    };
+
+    const resetForm = () => {
+        setFormData({
+            email: '',
+            password: '',
+            nombre: '',
+            rol: 'admin',
+            activo: true
+        });
+        setEditingUser(null);
+    };
+
+    return React.createElement('div', { className: 'container mt-4' },
+        React.createElement('div', { className: 'd-flex justify-content-between align-items-center mb-4' },
+            React.createElement('h3', null, 
+                React.createElement('i', { className: 'fas fa-users-cog me-2' }),
+                'Gestión de Accesos (Whitelist)'
+            ),
+            React.createElement('button', {
+                className: 'btn btn-secondary',
+                onClick: onClose
+            }, 
+                React.createElement('i', { className: 'fas fa-arrow-left me-2' }),
+                'Volver al Sistema'
+            )
+        ),
+
+        React.createElement('div', { className: 'mb-3' },
+            React.createElement('button', {
+                className: 'btn btn-primary',
+                onClick: () => {
+                    resetForm();
+                    setShowModal(true);
+                }
+            },
+                React.createElement('i', { className: 'fas fa-plus me-2' }),
+                'Agregar Usuario'
+            )
+        ),
+
+        loading ? React.createElement('div', { className: 'text-center' }, 'Cargando...') :
+        React.createElement('div', { className: 'table-responsive' },
+            React.createElement('table', { className: 'table table-striped' },
+                React.createElement('thead', null,
+                    React.createElement('tr', null,
+                        React.createElement('th', null, 'Email'),
+                        React.createElement('th', null, 'Nombre'),
+                        React.createElement('th', null, 'Rol'),
+                        React.createElement('th', null, 'Estado'),
+                        React.createElement('th', null, 'Acciones')
+                    )
+                ),
+                React.createElement('tbody', null,
+                    users.map(user => React.createElement('tr', { key: user.id },
+                        React.createElement('td', null, user.email),
+                        React.createElement('td', null, user.nombre),
+                        React.createElement('td', null, user.rol),
+                        React.createElement('td', null,
+                            React.createElement('span', { 
+                                className: `badge ${user.activo ? 'bg-success' : 'bg-danger'}` 
+                            }, user.activo ? 'Activo' : 'Inactivo')
+                        ),
+                        React.createElement('td', null,
+                            React.createElement('button', {
+                                className: 'btn btn-sm btn-outline-primary me-2',
+                                onClick: () => handleEdit(user)
+                            }, React.createElement('i', { className: 'fas fa-edit' })),
+                            React.createElement('button', {
+                                className: 'btn btn-sm btn-outline-danger',
+                                onClick: () => handleDelete(user.id)
+                            }, React.createElement('i', { className: 'fas fa-trash' }))
+                        )
+                    ))
+                )
+            )
+        ),
+
+        // Modal
+        showModal && React.createElement('div', { 
+            className: 'modal show d-block',
+            style: { backgroundColor: 'rgba(0,0,0,0.5)' }
+        },
+            React.createElement('div', { className: 'modal-dialog' },
+                React.createElement('div', { className: 'modal-content' },
+                    React.createElement('div', { className: 'modal-header' },
+                        React.createElement('h5', { className: 'modal-title' },
+                            editingUser ? 'Editar Usuario' : 'Nuevo Usuario'
+                        ),
+                        React.createElement('button', { 
+                            type: 'button', 
+                            className: 'btn-close',
+                            onClick: () => {
+                                setShowModal(false);
+                                resetForm();
+                            }
+                        })
+                    ),
+                    React.createElement('form', { onSubmit: handleSave },
+                        React.createElement('div', { className: 'modal-body' },
+                            React.createElement('div', { className: 'mb-3' },
+                                React.createElement('label', { className: 'form-label' }, 'Email'),
+                                React.createElement('input', {
+                                    type: 'email',
+                                    className: 'form-control',
+                                    value: formData.email,
+                                    onChange: (e) => setFormData({...formData, email: e.target.value}),
+                                    required: true
+                                })
+                            ),
+                            React.createElement('div', { className: 'mb-3' },
+                                React.createElement('label', { className: 'form-label' }, 
+                                    editingUser ? 'Nueva Contraseña (dejar vacío para no cambiar)' : 'Contraseña'
+                                ),
+                                React.createElement('input', {
+                                    type: 'password',
+                                    className: 'form-control',
+                                    value: formData.password,
+                                    onChange: (e) => setFormData({...formData, password: e.target.value}),
+                                    required: !editingUser
+                                })
+                            ),
+                            React.createElement('div', { className: 'mb-3' },
+                                React.createElement('label', { className: 'form-label' }, 'Nombre'),
+                                React.createElement('input', {
+                                    type: 'text',
+                                    className: 'form-control',
+                                    value: formData.nombre,
+                                    onChange: (e) => setFormData({...formData, nombre: e.target.value}),
+                                    required: true
+                                })
+                            ),
+                            React.createElement('div', { className: 'mb-3' },
+                                React.createElement('label', { className: 'form-label' }, 'Rol'),
+                                React.createElement('select', {
+                                    className: 'form-select',
+                                    value: formData.rol,
+                                    onChange: (e) => setFormData({...formData, rol: e.target.value})
+                                },
+                                    React.createElement('option', { value: 'admin' }, 'Administrador'),
+                                    React.createElement('option', { value: 'user' }, 'Usuario')
+                                )
+                            ),
+                            React.createElement('div', { className: 'form-check' },
+                                React.createElement('input', {
+                                    type: 'checkbox',
+                                    className: 'form-check-input',
+                                    checked: formData.activo,
+                                    onChange: (e) => setFormData({...formData, activo: e.target.checked})
+                                }),
+                                React.createElement('label', { className: 'form-check-label' }, 'Usuario Activo')
+                            )
+                        ),
+                        React.createElement('div', { className: 'modal-footer' },
+                            React.createElement('button', { 
+                                type: 'button', 
+                                className: 'btn btn-secondary',
+                                onClick: () => {
+                                    setShowModal(false);
+                                    resetForm();
+                                }
+                            }, 'Cancelar'),
+                            React.createElement('button', { 
+                                type: 'submit', 
+                                className: 'btn btn-primary'
+                            }, 'Guardar')
+                        )
+                    )
+                )
+            )
+        )
+    );
+}
+
 // Component for individual worker card
 function WorkerCard({ worker, onEdit, onDelete }) {
     const [showDocuments, setShowDocuments] = useState(false);
@@ -466,6 +812,9 @@ function WorkerModal({ show, onHide, worker, onSave }) {
 
 // Main App component
 function App() {
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [currentUser, setCurrentUser] = useState(null);
+    const [showWhitelist, setShowWhitelist] = useState(false);
     const [workers, setWorkers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -473,6 +822,30 @@ function App() {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
     const [error, setError] = useState(null);
+
+    // Verificar autenticación al cargar
+    useEffect(() => {
+        const token = localStorage.getItem('auth_token');
+        const userData = localStorage.getItem('user_data');
+        
+        if (token && userData) {
+            try {
+                setCurrentUser(JSON.parse(userData));
+                setIsAuthenticated(true);
+            } catch (error) {
+                handleLogout();
+            }
+        } else {
+            setLoading(false);
+        }
+    }, []);
+
+    // Cargar workers solo si está autenticado
+    useEffect(() => {
+        if (isAuthenticated) {
+            fetchWorkers();
+        }
+    }, [isAuthenticated]);
 
     // Fetch workers from API
     const fetchWorkers = async () => {
@@ -497,9 +870,18 @@ function App() {
         }
     };
 
-    useEffect(() => {
-        fetchWorkers();
-    }, []);
+    const handleLoginSuccess = (user) => {
+        setCurrentUser(user);
+        setIsAuthenticated(true);
+    };
+
+    const handleLogout = () => {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_data');
+        setIsAuthenticated(false);
+        setCurrentUser(null);
+        setShowWhitelist(false);
+    };
 
     // Add or update worker
     const handleSaveWorker = async (workerData) => {
@@ -588,7 +970,8 @@ function App() {
         ).length
     };
 
-    if (loading) {
+    // Si está cargando la autenticación inicial
+    if (loading && !isAuthenticated) {
         return React.createElement('div', { className: 'loading-spinner' },
             React.createElement('div', { className: 'spinner-border text-primary', role: 'status' },
                 React.createElement('span', { className: 'visually-hidden' }, 'Cargando...')
@@ -596,26 +979,54 @@ function App() {
         );
     }
 
-    if (error) {
-        return React.createElement('div', { className: 'container mt-5' },
-            React.createElement('div', { className: 'alert alert-danger' },
-                React.createElement('h4', { className: 'alert-heading' }, 'Error'),
-                React.createElement('p', null, error),
-                React.createElement('button', {
-                    className: 'btn btn-primary',
-                    onClick: fetchWorkers
-                }, 'Reintentar')
+    // Si no está autenticado, mostrar login
+    if (!isAuthenticated) {
+        return React.createElement(LoginPage, { onLoginSuccess: handleLoginSuccess });
+    }
+
+    // Si está en panel de whitelist
+    if (showWhitelist) {
+        return React.createElement(WhitelistPanel, { 
+            onClose: () => setShowWhitelist(false) 
+        });
+    }
+
+    // Si está cargando workers
+    if (loading) {
+        return React.createElement('div', { className: 'loading-spinner' },
+            React.createElement('div', { className: 'spinner-border text-primary', role: 'status' },
+                React.createElement('span', { className: 'visually-hidden' }, 'Cargando trabajadores...')
             )
         );
     }
 
     return React.createElement('div', { className: 'min-vh-100 bg-light' },
-        // Header
+        // Header (modificado con opción de logout y whitelist)
         React.createElement('nav', { className: 'navbar navbar-expand-lg navbar-dark bg-primary' },
             React.createElement('div', { className: 'container' },
                 React.createElement('a', { className: 'navbar-brand' },
                     React.createElement('i', { className: 'fas fa-shield-alt me-2' }),
                     'Sistema de Gestión de Trabajadores JC & Villagran'
+                ),
+                React.createElement('div', { className: 'd-flex gap-2' },
+                    React.createElement('span', { className: 'navbar-text text-white me-3' },
+                        React.createElement('i', { className: 'fas fa-user me-2' }),
+                        currentUser?.nombre
+                    ),
+                    React.createElement('button', {
+                        className: 'btn btn-outline-light btn-sm me-2',
+                        onClick: () => setShowWhitelist(true)
+                    },
+                        React.createElement('i', { className: 'fas fa-users-cog me-2' }),
+                        'Whitelist'
+                    ),
+                    React.createElement('button', {
+                        className: 'btn btn-outline-light btn-sm',
+                        onClick: handleLogout
+                    },
+                        React.createElement('i', { className: 'fas fa-sign-out-alt me-2' }),
+                        'Salir'
+                    )
                 )
             )
         ),
