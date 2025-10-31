@@ -54,28 +54,45 @@ async function deleteFilesFromStorage(documentos: any[]) {
 
 // Funciones helper para normalizar formatos
 function normalizeCedula(cedula: string): string {
-  // Convertir a mayúsculas y eliminar puntos y guiones, permitir números y K
+  // Limpiar: solo números y K
   const cleaned = cedula.toUpperCase().replace(/[^0-9K]/g, '');
   
-  // Separar números y letra K
+  // Separar números del verificador
   const numbers = cleaned.replace(/K/g, '');
   const hasK = cleaned.includes('K');
   
-  // Verificar que tenga 8 dígitos principales
-  if (numbers.length >= 8) {
-    const mainDigits = numbers.slice(0, 8);
-    
-    if (hasK) {
-      // Formato con K: XX.XXX.XXX-K
-      return `${mainDigits.slice(0, 2)}.${mainDigits.slice(2, 5)}.${mainDigits.slice(5, 8)}-K`;
-    } else if (numbers.length >= 9) {
-      // Formato con dígito verificador: XX.XXX.XXX-X
-      const lastDigit = numbers.slice(8, 9);
-      return `${mainDigits.slice(0, 2)}.${mainDigits.slice(2, 5)}.${mainDigits.slice(5, 8)}-${lastDigit}`;
-    }
+  if (numbers.length === 0) return cedula;
+  
+  // Determinar verificador
+  let mainDigits: string;
+  let verificador: string;
+  
+  if (hasK) {
+    mainDigits = numbers;
+    verificador = 'K';
+  } else if (numbers.length > 7) {
+    mainDigits = numbers.slice(0, -1);
+    verificador = numbers.slice(-1);
+  } else {
+    return cedula; // No tiene formato completo
   }
   
-  return cedula; // Si no tiene el formato esperado, devolver como está
+  const length = mainDigits.length;
+  
+  // Formatear según cantidad de dígitos principales
+  let formatted: string;
+  
+  if (length === 7) {
+    // 7 dígitos: X.XXX.XXX-V (ejemplo: 9.101.850-0)
+    formatted = `${mainDigits.slice(0, 1)}.${mainDigits.slice(1, 4)}.${mainDigits.slice(4, 7)}`;
+  } else if (length === 8) {
+    // 8 dígitos: XX.XXX.XXX-V (ejemplo: 21.522.019-2)
+    formatted = `${mainDigits.slice(0, 2)}.${mainDigits.slice(2, 5)}.${mainDigits.slice(5, 8)}`;
+  } else {
+    return cedula; // Formato no esperado
+  }
+  
+  return `${formatted}-${verificador}`;
 }
 
 function normalizeTelefono(telefono: string): string {

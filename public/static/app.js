@@ -7,43 +7,64 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Funciones de formateo
 const formatCedula = (value) => {
-    // Permitir números y la letra K
+    // Limpiar: solo números y K
     const cleaned = value.toUpperCase().replace(/[^0-9K]/g, '');
     
-    // Separar números y letra K
+    // Separar números del verificador (K o último dígito)
     const numbers = cleaned.replace(/K/g, '');
     const hasK = cleaned.includes('K');
     
-    // Limitar a 8 dígitos principales + 1 verificador (número o K)
-    const mainDigits = numbers.slice(0, 8);
-    const lastDigit = numbers.slice(8, 9);
+    if (numbers.length === 0) return '';
     
-    // Si no hay dígitos, retornar vacío
-    if (mainDigits.length === 0) return '';
+    // Determinar verificador
+    let mainDigits;
+    let verificador;
     
-    // Aplicar formato XX.XXX.XXX
-    if (mainDigits.length <= 2) {
-        return mainDigits;
-    }
-    if (mainDigits.length <= 5) {
-        return `${mainDigits.slice(0, 2)}.${mainDigits.slice(2)}`;
-    }
-    if (mainDigits.length <= 8) {
-        const formatted = `${mainDigits.slice(0, 2)}.${mainDigits.slice(2, 5)}.${mainDigits.slice(5)}`;
-        
-        // Si tiene exactamente 8 dígitos y hay K o un dígito verificador
-        if (mainDigits.length === 8 && (hasK || lastDigit)) {
-            if (hasK) {
-                return `${formatted}-K`;
-            } else if (lastDigit) {
-                return `${formatted}-${lastDigit}`;
-            }
-        }
-        
-        return formatted;
+    if (hasK) {
+        // Si tiene K, todos los números son dígitos principales
+        mainDigits = numbers;
+        verificador = 'K';
+    } else if (numbers.length > 7) {
+        // Si tiene más de 7 dígitos, el último es el verificador
+        mainDigits = numbers.slice(0, -1);
+        verificador = numbers.slice(-1);
+    } else {
+        // Aún no hay verificador completo
+        mainDigits = numbers;
+        verificador = '';
     }
     
-    return mainDigits;
+    const length = mainDigits.length;
+    
+    // Formatear según cantidad de dígitos principales
+    let formatted;
+    
+    if (length <= 1) {
+        formatted = mainDigits;
+    } else if (length === 2) {
+        formatted = mainDigits; // 12
+    } else if (length === 3) {
+        formatted = mainDigits; // 123
+    } else if (length === 4) {
+        formatted = `${mainDigits.slice(0, 1)}.${mainDigits.slice(1)}`; // 1.234
+    } else if (length === 5) {
+        formatted = `${mainDigits.slice(0, 2)}.${mainDigits.slice(2)}`; // 12.345
+    } else if (length === 6) {
+        formatted = `${mainDigits.slice(0, 3)}.${mainDigits.slice(3)}`; // 123.456
+    } else if (length === 7) {
+        // 7 dígitos: X.XXX.XXX (ejemplo: 9.101.850)
+        formatted = `${mainDigits.slice(0, 1)}.${mainDigits.slice(1, 4)}.${mainDigits.slice(4)}`;
+    } else if (length >= 8) {
+        // 8 dígitos: XX.XXX.XXX (ejemplo: 21.522.019)
+        formatted = `${mainDigits.slice(0, 2)}.${mainDigits.slice(2, 5)}.${mainDigits.slice(5, 8)}`;
+    }
+    
+    // Agregar verificador si existe
+    if (verificador) {
+        return `${formatted}-${verificador}`;
+    }
+    
+    return formatted;
 };
 
 const formatTelefono = (value) => {
@@ -189,11 +210,11 @@ function WorkerModal({ show, onHide, worker, onSave }) {
 
             setFormData({
                 nombre: worker.nombre || '',
-                cedula: formatCedula(worker.cedula || ''),
+                cedula: worker.cedula || '', // Sin formatear al cargar
                 cargo: worker.cargo || '',
                 turno: worker.turno || '',
                 estado: normalizeStatus(worker.estado || 'Disponible'),
-                telefono: formatTelefono(worker.telefono || ''),
+                telefono: worker.telefono || '', // Sin formatear al cargar
                 documentos: Array.isArray(worker.documentos) ? worker.documentos : []
             });
         } else {
@@ -230,13 +251,18 @@ function WorkerModal({ show, onHide, worker, onSave }) {
         e.preventDefault();
         setIsUploading(true);
 
-        let finalWorkerData = { ...formData };
+        // Aplicar formato SOLO al guardar
+        let finalWorkerData = {
+            ...formData,
+            cedula: formatCedula(formData.cedula),
+            telefono: formatTelefono(formData.telefono)
+        };
 
         if (files.length > 0) {
             try {
                 const uploadedDocs = [];
                 for (const file of files) {
-                    const sanitizedCedula = (formData.cedula || 'sin-cedula').replace(/[^a-zA-Z0-9.-]/g, '_');
+                    const sanitizedCedula = (finalWorkerData.cedula || 'sin-cedula').replace(/[^a-zA-Z0-9.-]/g, '_');
                     const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
                     const fileName = `${sanitizedCedula}_${Date.now()}_${sanitizedFileName}`;
                     
@@ -276,18 +302,11 @@ function WorkerModal({ show, onHide, worker, onSave }) {
         
         let formattedValue = value;
         
-        // Aplicar formato según el campo
-        if (name === 'cedula') {
-            // Permitir borrar el guion
-            // Si el usuario está borrando y el último carácter es '-', quitarlo
-            if (value.endsWith('-') && value.length < formData.cedula.length) {
-                formattedValue = value.slice(0, -1);
-            } else {
-                formattedValue = formatCedula(value);
-            }
-        } else if (name === 'telefono') {
+        // Aplicar formato SOLO al teléfono en tiempo real
+        if (name === 'telefono') {
             formattedValue = formatTelefono(value);
         }
+        // La cédula NO se formatea en tiempo real, solo al guardar
         
         setFormData({
             ...formData,
@@ -338,10 +357,8 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                                         onChange: handleChange,
                                         required: true,
                                         placeholder: 'Cédula'
-                                        // Removido maxLength para permitir la K
                                     }),
-                                    React.createElement('label', { htmlFor: 'cedula' }, 'Cédula (XX.XXX.XXX-X o XX.XXX.XXX-K)')
-                                )
+                                    React.createElement('label', { htmlFor: 'cedula' }, 'Cédula'),                                )
                             ),
                             React.createElement('div', { className: 'col-md-6 mb-3' },
                                 React.createElement('div', { className: 'form-floating' },
@@ -407,10 +424,9 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                                         value: formData.telefono,
                                         onChange: handleChange,
                                         required: true,
-                                        placeholder: 'Teléfono',
-                                        maxLength: 11 // X XXXX XXXX = 11 caracteres
+                                        placeholder: 'Teléfono'
                                     }),
-                                    React.createElement('label', { htmlFor: 'telefono' }, 'Teléfono (X XXXX XXXX)')
+                                    React.createElement('label', { htmlFor: 'telefono' }, 'Teléfono'),
                                 )
                             ),
                             React.createElement('div', { className: 'col-12 mb-3' },
