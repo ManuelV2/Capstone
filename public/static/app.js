@@ -608,7 +608,22 @@ function WorkerModal({ show, onHide, worker, onSave }) {
 
     const handleFileChange = (e) => {
         if (e.target.files && e.target.files.length > 0) {
-            setFiles(Array.from(e.target.files));
+            const selectedFiles = Array.from(e.target.files);
+            
+            // Validar que todos sean PDFs
+            const invalidFiles = selectedFiles.filter(file => !file.type.includes('pdf'));
+            
+            if (invalidFiles.length > 0) {
+                alert(`Los siguientes archivos no son PDFs y serán ignorados:\n${invalidFiles.map(f => f.name).join('\n')}`);
+                
+                // Filtrar solo archivos PDF válidos
+                const validFiles = selectedFiles.filter(file => file.type.includes('pdf'));
+                setFiles(validFiles);
+            } else {
+                setFiles(selectedFiles);
+            }
+            
+            console.log(`📎 ${selectedFiles.length} archivo(s) PDF seleccionado(s) para subir`);
         }
     };
 
@@ -677,14 +692,13 @@ function WorkerModal({ show, onHide, worker, onSave }) {
         console.log('🚀 INICIANDO SUBMIT');
         console.log('📋 Estado actual de formData.documentos:', formData.documentos);
 
-        // CRÍTICO: Usar setFormData con callback para asegurar que tenemos el estado más reciente
         setFormData(currentFormData => {
-            console.log('📄 Documentos en callback:', currentFormData.documentos);
+            console.log('📄 Documentos existentes:', currentFormData.documentos.length);
+            console.log('📤 Archivos nuevos para subir:', files.length);
             console.log('🔔 Documentos con recordatorio:', 
-                currentFormData.documentos.filter(d => d.recordatorio)
+                currentFormData.documentos.filter(d => d.recordatorio).length
             );
 
-            // Crear objeto con datos finales
             const finalData = {
                 nombre: currentFormData.nombre,
                 cedula: formatCedula(currentFormData.cedula),
@@ -697,28 +711,38 @@ function WorkerModal({ show, onHide, worker, onSave }) {
 
             console.log('💾 Datos finales ANTES de subir archivos:', finalData);
 
-            // Ejecutar la lógica de subida de archivos y guardado
             (async () => {
                 let allDocuments = [...currentFormData.documentos];
 
-                // Subir nuevos archivos si hay
+                // Subir TODOS los archivos nuevos
                 if (files.length > 0) {
-                    console.log(`📤 Subiendo ${files.length} archivo(s)...`);
+                    console.log(`\n📤 ========================================`);
+                    console.log(`📤 Subiendo ${files.length} archivo(s) PDF...`);
+                    console.log(`📤 ========================================\n`);
+                    
                     try {
-                        for (const file of files) {
+                        const uploadPromises = files.map(async (file, index) => {
+                            const fileNumber = index + 1;
+                            console.log(`📄 [${fileNumber}/${files.length}] Procesando: ${file.name}`);
+                            
                             const sanitizedCedula = finalData.cedula.replace(/[^a-zA-Z0-9.-]/g, '_');
                             const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-                            const fileName = `${sanitizedCedula}_${Date.now()}_${sanitizedFileName}`;
+                            const timestamp = Date.now();
+                            const fileName = `${sanitizedCedula}_${timestamp}_${index}_${sanitizedFileName}`;
+                            
+                            console.log(`   ⏳ Subiendo a Storage: ${fileName}`);
                             
                             const { data: uploadData, error: uploadError } = await supabaseClient
                                 .storage
                                 .from('documentos_trabajadores')
-                                .upload(fileName, file, { upsert: true, contentType: file.type });
+                                .upload(fileName, file, { 
+                                    upsert: true, 
+                                    contentType: file.type 
+                                });
 
                             if (uploadError) {
-                                console.error('❌ Error al subir:', uploadError);
-                                alert(`Error al subir ${file.name}: ${uploadError.message}`);
-                                continue;
+                                console.error(`   ❌ Error al subir ${file.name}:`, uploadError);
+                                throw new Error(`Error al subir ${file.name}: ${uploadError.message}`);
                             }
 
                             const { data: urlData } = supabaseClient.storage
@@ -726,35 +750,53 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                                 .getPublicUrl(uploadData.path);
                             
 
-                            allDocuments.push({
+                            console.log(`   ✅ [${fileNumber}/${files.length}] Subido exitosamente: ${file.name}`);
+                            
+                            return {
                                 url: urlData.publicUrl,
                                 nombre: file.name,
                                 fecha: new Date().toISOString()
-                            });
-                        }
+                            };
+                        });
+
+                        // Esperar a que TODOS los archivos se suban
+                        console.log('\n⏳ Esperando a que se completen todas las subidas...\n');
+                        const uploadedDocs = await Promise.all(uploadPromises);
+                        
+                        console.log(`\n✅ ========================================`);
+                        console.log(`✅ ${uploadedDocs.length} archivo(s) subido(s) exitosamente`);
+                        console.log(`✅ ========================================\n`);
+                        
+                        // Agregar todos los documentos nuevos a la lista
+                        allDocuments = [...allDocuments, ...uploadedDocs];
+                        
                     } catch (error) {
-                        console.error('❌ Error subiendo archivos:', error);
-                        alert('Error al subir documentos');
+                        console.error('\n❌ Error durante la subida de archivos:', error);
+                        alert(`Error al subir documentos: ${error.message}\n\nPor favor, intente de nuevo.`);
                         setIsUploading(false);
                         return;
                     }
                 }
 
-                // Actualizar con todos los documentos
+                // Actualizar con todos los documentos (existentes + nuevos)
                 finalData.documentos = allDocuments;
 
-                console.log('💾 DATOS FINALES A ENVIAR:');
-                console.log(JSON.stringify(finalData, null, 2));
-                console.log('🔔 Total recordatorios:', 
-                    finalData.documentos.filter(d => d.recordatorio).length
-                );
+                console.log('\n💾 ========================================');
+                console.log('💾 RESUMEN FINAL:');
+                console.log(`📋 Total documentos: ${finalData.documentos.length}`);
+                console.log(`🔔 Documentos con recordatorio: ${finalData.documentos.filter(d => d.recordatorio).length}`);
+                console.log('💾 ========================================\n');
+
+                console.log('📤 Enviando datos al servidor...');
 
                 // Enviar al servidor
                 await onSave(finalData);
                 setIsUploading(false);
+                
+                // Limpiar archivos seleccionados después de guardar exitosamente
+                setFiles([]);
             })();
 
-            // Retornar el estado actual sin cambios
             return currentFormData;
         });
     };
@@ -782,7 +824,7 @@ function WorkerModal({ show, onHide, worker, onSave }) {
         className: 'modal show d-block',
         style: { backgroundColor: 'rgba(0,0,0,0.5)' }
     },
-        React.createElement('div', { className: 'modal-dialog modal-xl' }, // Cambiado a modal-xl para más espacio
+        React.createElement('div', { className: 'modal-dialog modal-xl' },
             React.createElement('div', { className: 'modal-content' },
                 React.createElement('div', { className: 'modal-header' },
                     React.createElement('h5', { className: 'modal-title' },
@@ -893,16 +935,39 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                                 )
                             ),
                             React.createElement('div', { className: 'col-12 mb-3' },
-                                React.createElement('label', { htmlFor: 'documento', className: 'form-label' }, 'Subir Nuevos Documentos (PDF)'),
+                                React.createElement('label', { htmlFor: 'documento', className: 'form-label fw-bold' }, 
+                                    React.createElement('i', { className: 'fas fa-cloud-upload-alt me-2' }),
+                                    'Subir Documentos (PDF)'
+                                ),
                                 React.createElement('input', {
                                     type: 'file',
                                     className: 'form-control',
                                     id: 'documento',
-                                    accept: '.pdf',
+                                    accept: '.pdf,application/pdf',
                                     multiple: true,
                                     onChange: handleFileChange
                                 }),
-                                files.length > 0 && React.createElement('small', { className: 'd-block mt-2 text-success' }, `${files.length} archivo(s) nuevo(s) para subir.`)
+                                React.createElement('small', { className: 'text-muted d-block mt-1' },
+                                    React.createElement('i', { className: 'fas fa-info-circle me-1' }),
+                                    'Puedes seleccionar múltiples archivos PDF a la vez (Ctrl/Cmd + Click)'
+                                ),
+                                files.length > 0 && React.createElement('div', { className: 'alert alert-success mt-2 mb-0 py-2' },
+                                    React.createElement('strong', null,
+                                        React.createElement('i', { className: 'fas fa-check-circle me-2' }),
+                                        `${files.length} archivo(s) seleccionado(s) para subir:`
+                                    ),
+                                    React.createElement('ul', { className: 'mb-0 mt-2 ps-4' },
+                                        files.map((file, index) => 
+                                            React.createElement('li', { key: index },
+                                                React.createElement('i', { className: 'fas fa-file-pdf text-danger me-2' }),
+                                                file.name,
+                                                React.createElement('small', { className: 'text-muted ms-2' },
+                                                    `(${(file.size / 1024).toFixed(2)} KB)`
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
                             ),
                             
                             // NUEVO: Lista de documentos con recordatorios
@@ -983,9 +1048,27 @@ function WorkerModal({ show, onHide, worker, onSave }) {
                         )
                     ),
                     React.createElement('div', { className: 'modal-footer' },
-                        React.createElement('button', { type: 'button', className: 'btn btn-secondary', onClick: onHide, disabled: isUploading }, 'Cancelar'),
-                        React.createElement('button', { type: 'submit', className: 'btn btn-primary', disabled: isUploading }, 
-                            isUploading ? 'Guardando...' : (worker ? 'Actualizar' : 'Guardar')
+                        React.createElement('button', { 
+                            type: 'button', 
+                            className: 'btn btn-secondary', 
+                            onClick: onHide, 
+                            disabled: isUploading 
+                        }, 'Cancelar'),
+                        React.createElement('button', { 
+                            type: 'submit', 
+                            className: 'btn btn-primary', 
+                            disabled: isUploading 
+                        }, 
+                            isUploading ? (
+                                React.createElement('span', null,
+                                    React.createElement('span', { 
+                                        className: 'spinner-border spinner-border-sm me-2',
+                                        role: 'status',
+                                        'aria-hidden': 'true'
+                                    }),
+                                    files.length > 0 ? `Subiendo ${files.length} archivo(s)...` : 'Guardando...'
+                                )
+                            ) : (worker ? 'Actualizar' : 'Guardar')
                         )
                     )
                 )
