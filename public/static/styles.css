@@ -159,3 +159,26 @@ input[type="time"] {
 .btn-warning .fa-bell {
     animation: pulse-bell 2s infinite;
 }
+
+/* Estilos para recordatorios en las tarjetas de trabajadores */
+.list-group-item .alert-warning {
+    background-color: #fff3cd;
+    border-left: 3px solid #ffc107;
+    font-size: 0.85rem;
+}
+
+.list-group-item .alert-warning .fa-bell {
+    color: #ff9800;
+    animation: pulse-bell-card 2s infinite;
+}
+
+@keyframes pulse-bell-card {
+    0%, 100% { 
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% { 
+        transform: scale(1.15);
+        opacity: 0.8;
+    }
+}

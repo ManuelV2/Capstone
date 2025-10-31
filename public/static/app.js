@@ -491,18 +491,45 @@ function WorkerCard({ worker, onEdit, onDelete }) {
                         ),
                         showDocuments && React.createElement('div', { className: 'list-group mt-2' },
                             documentos.map((doc, index) => 
-                                React.createElement('a', {
+                                React.createElement('div', {
                                     key: index,
-                                    href: doc.url,
-                                    target: '_blank',
-                                    rel: 'noopener noreferrer',
-                                    className: 'list-group-item list-group-item-action d-flex justify-content-between align-items-center'
+                                    className: 'list-group-item'
                                 },
-                                    React.createElement('span', { className: 'text-truncate' },
-                                        React.createElement('i', { className: 'fas fa-file-pdf me-2 text-danger' }),
-                                        doc.nombre
-                                    ),
-                                    doc.fecha && React.createElement('small', { className: 'text-muted' }, new Date(doc.fecha).toLocaleDateString())
+                                    React.createElement('div', { className: 'd-flex justify-content-between align-items-start' },
+                                        React.createElement('div', { className: 'flex-grow-1' },
+                                            React.createElement('a', {
+                                                href: doc.url,
+                                                target: '_blank',
+                                                rel: 'noopener noreferrer',
+                                                className: 'd-flex align-items-center text-decoration-none mb-1'
+                                            },
+                                                React.createElement('i', { className: 'fas fa-file-pdf text-danger me-2' }),
+                                                React.createElement('span', { className: 'fw-bold' }, doc.nombre)
+                                            ),
+                                            doc.fecha && React.createElement('small', { className: 'text-muted d-block' }, 
+                                                `Subido: ${new Date(doc.fecha).toLocaleDateString('es-CL')}`
+                                            ),
+                                            // NUEVO: Mostrar recordatorio si existe
+                                            doc.recordatorio && React.createElement('div', { className: 'alert alert-warning py-1 px-2 mt-2 mb-0' },
+                                                React.createElement('small', { className: 'd-flex align-items-center' },
+                                                    React.createElement('i', { className: 'fas fa-bell me-2' }),
+                                                    React.createElement('span', null,
+                                                        React.createElement('strong', null, 'Recordatorio: '),
+                                                        new Date(doc.recordatorio.fechaHora).toLocaleDateString('es-CL', {
+                                                            year: 'numeric',
+                                                            month: 'short',
+                                                            day: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        })
+                                                    )
+                                                ),
+                                                doc.recordatorio.mensaje && React.createElement('small', { className: 'd-block mt-1 ms-4' },
+                                                    doc.recordatorio.mensaje
+                                                )
+                                            )
+                                        )
+                                    )
                                 )
                             )
                         )
